@@ -141,6 +141,68 @@ def create_incident(incident):
     connection.commit()
     return new_incident
 
+def create_incident_history(history):
+    query = """
+        INSERT INTO incident_history (
+            id,
+            incident_id,
+            change_type,
+            severity,
+            root_cause_event_id,
+            root_cause_reason,
+            root_cause_evidence
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        RETURNING *
+    """
+    values = (
+        history["id"],
+        history["incident_id"],
+        history["change_type"],
+        history["severity"],
+        history.get("root_cause_event_id"),
+        history.get("root_cause_reason"),
+        Jsonb(history.get("root_cause_evidence", [])),
+    )
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute(query, values)
+        history_record = cursor.fetchone()
+
+    connection.commit()
+    return history_record
+
+def update_incident_assessment(incident_id, assessment):
+    query = """
+        UPDATE incidents
+        SET
+            severity = %s,
+            root_cause_event_id = %s,
+            root_cause_reason = %s,
+            root_cause_evidence = %s
+        WHERE id = %s
+        RETURNING *
+    """
+
+    values = (
+        assessment["severity"],
+        assessment["root_cause_event_id"],
+        assessment["root_cause_reason"],
+        Jsonb(assessment.get("root_cause_evidence", [])),
+        incident_id,
+    )
+
+    try:
+        with connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(query, values)
+            updated_incident = cursor.fetchone()
+
+        connection.commit()
+        return updated_incident
+
+    except Exception:
+        connection.rollback()
+        raise
+
 def update_incident_status(incident_id, old_status,new_status):
     try:
         with connection.cursor(row_factory=dict_row) as cursor:
@@ -229,6 +291,8 @@ def get_active_incident_by_device(device_id):
                 incidents.severity,
                 incidents.status,
                 incidents.root_cause_event_id,
+                incidents.root_cause_reason,
+                incidents.root_cause_evidence,
                 incidents.created_at
             FROM incidents
             JOIN events

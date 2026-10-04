@@ -441,3 +441,147 @@ def test_analyze_root_cause_handles_empty_events():
     assert result["reason"] == "no_events"
     assert result["evidence"] == []
 
+def test_detected_incident_candidate_uses_topology_evidence():
+    from main import get_detected_incident_candidates
+
+    base_time = datetime(2026, 10, 2, 10, 0)
+
+    events = [
+        {
+            "id": "event-001",
+            "device_id": "dev-001",
+            "type": "interface_down",
+            "severity": "Critical",
+            "timestamp": base_time,
+        },
+        {
+            "id": "event-002",
+            "device_id": "dev-002",
+            "type": "packet_loss",
+            "severity": "Warning",
+            "timestamp": base_time + timedelta(minutes=2),
+        },
+    ]
+
+    dependencies = [
+        {
+            "upstream_device_id": "dev-001",
+            "downstream_device_id": "dev-002",
+        }
+    ]
+
+    candidates = get_detected_incident_candidates(events, dependencies)
+
+    assert len(candidates) == 1
+
+    candidate = candidates[0]
+
+    assert candidate["device_id"] == "dev-001"
+    assert candidate["severity"] == "Critical"
+    assert candidate["root_cause_event_id"] == "event-001"
+    assert candidate["root_cause_reason"] == "topology_supported"
+    assert candidate["root_cause_evidence"] == ["event-002"]
+    assert "dev-002" in candidate["affected_devices"]
+
+from unittest.mock import patch
+
+
+def test_analyze_events_creates_incident_and_history():
+    from main import analyze_events_and_create_incidents
+
+    candidate = {
+        "title": "Network Incident - dev-001",
+        "severity": "Critical",
+        "device_id": "dev-001",
+        "root_cause_event_id": "event-001",
+        "affected_devices": {"dev-002": 1},
+        "root_cause_reason": "topology_supported",
+        "root_cause_evidence": ["event-002"],
+    }
+
+    created_incident = {
+        "id": "incident-001",
+        "title": candidate["title"],
+        "severity": candidate["severity"],
+        "root_cause_event_id": candidate["root_cause_event_id"],
+        "root_cause_reason": candidate["root_cause_reason"],
+        "root_cause_evidence": candidate["root_cause_evidence"],
+    }
+
+    with (
+        patch("main.get_events", return_value=[{"id": "event-001"}]),
+        patch("main.get_device_dependencies", return_value=[]),
+        patch("main.get_detected_incident_candidates", return_value=[candidate]),
+        patch("main.get_active_incident_by_device", return_value=None),
+        patch("main.create_incident", return_value=created_incident) as mock_create,
+        patch("main.create_incident_history") as mock_history,
+    ):
+        result = analyze_events_and_create_incidents()
+
+    assert len(result) == 1
+    assert result[0]["id"] == "incident-001"
+    assert result[0]["affected_devices"] == {"dev-002": 1}
+
+    mock_create.assert_called_once()
+    mock_history.assert_called_once()
+
+    history_record = mock_history.call_args.args[0]
+    assert history_record["incident_id"] == "incident-001"
+    assert history_record["change_type"] == "INCIDENT_CREATED"
+    assert history_record["root_cause_event_id"] == "event-001"
+
+def test_analyze_events_upgrades_existing_incident_assessment():
+    from main import analyze_events_and_create_incidents
+
+    candidate = {
+        "title": "Network Incident - dev-001",
+        "severity": "Critical",
+        "device_id": "dev-001",
+        "root_cause_event_id": "event-001",
+        "affected_devices": {"dev-002": 1},
+        "root_cause_reason": "topology_supported",
+        "root_cause_evidence": ["event-002"],
+    }
+
+    existing_incident = {
+        "id": "incident-001",
+        "device_id": "dev-001",
+        "severity": "Critical",
+        "root_cause_reason": "priority_fallback",
+    }
+
+    updated_incident = {
+        **existing_incident,
+        "root_cause_reason": "topology_supported",
+        "root_cause_event_id": "event-001",
+        "root_cause_evidence": ["event-002"],
+    }
+
+    with (
+        patch("main.get_events", return_value=[]),
+        patch("main.get_device_dependencies", return_value=[]),
+        patch("main.get_detected_incident_candidates", return_value=[candidate]),
+        patch(
+            "main.get_active_incident_by_device",
+            return_value=existing_incident,
+        ),
+        patch(
+            "main.update_incident_assessment",
+            return_value=updated_incident,
+        ) as mock_update,
+        patch("main.create_incident_history") as mock_history,
+        patch("main.create_incident") as mock_create,
+    ):
+        result = analyze_events_and_create_incidents()
+
+    mock_update.assert_called_once_with("incident-001", candidate)
+    mock_create.assert_not_called()
+    mock_history.assert_called_once()
+
+    history_record = mock_history.call_args.args[0]
+    assert history_record["change_type"] == "ROOT_CAUSE_UPDATED"
+    assert history_record["incident_id"] == "incident-001"
+
+    assert len(result) == 1
+    assert result[0]["root_cause_reason"] == "topology_supported"
+    assert result[0]["affected_devices"] == {"dev-002": 1}

@@ -1,143 +1,254 @@
-
 import uuid
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Literal
 
 from database import (
-        get_events,
-        create_event,
-        get_incidents,
-        create_incident,
-        update_incident_status,
-        get_incident_by_id,
-        get_incident_status_history,
-        get_active_incident_by_device,
-        get_device_dependencies,
-        get_devices
-    )
-
-from utils.correlation import( correlate_events,correlate_events_across_devices,find_root_cause)
+    get_events,
+    create_event,
+    get_incidents,
+    create_incident,
+    create_incident_history,
+    update_incident_status,
+    get_incident_by_id,
+    get_incident_status_history,
+    get_active_incident_by_device,
+    get_device_dependencies,
+    get_devices,
+    update_incident_assessment,
+)
+from utils.correlation import (
+    correlate_events,
+    correlate_events_across_devices,
+    find_root_cause,
+)
 from utils.incident import is_valid_incident_transition
 from utils.incident_detection import detect_incident
 from utils.topology import find_affected_devices
 
-from pydantic import BaseModel
-from typing import Literal
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['http://localhost:3000'],
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
-    allow_methods=['*'],
-    allow_headers=['*']
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
 
 class EventCreate(BaseModel):
     device_id: str
     type: str
     severity: str
 
+
 class IncidentCreate(BaseModel):
     title: str
     severity: str
 
-class IncidentStatusUpdate(BaseModel):
-    status: Literal['Open','Investigating','Resolved','Closed']
 
-@app.get('/health')
+class IncidentStatusUpdate(BaseModel):
+    status: Literal["Open", "Investigating", "Resolved", "Closed"]
+
+# helper function for candidates
+def get_detected_incident_candidates(events, dependencies):
+    per_device_groups = correlate_events(events)
+    cross_device_groups = correlate_events_across_devices(
+        events, dependencies
+    )
+
+    groups = per_device_groups + cross_device_groups
+    candidates_by_root_event = {}
+
+    for group in groups:
+        candidate = detect_incident(group, dependencies)
+
+        if candidate is None:
+            continue
+
+        root_event_id = candidate["root_cause_event_id"]
+        existing = candidates_by_root_event.get(root_event_id)
+
+        if (
+            existing is None
+            or (
+                candidate["root_cause_reason"] == "topology_supported"
+                and existing["root_cause_reason"] != "topology_supported"
+            )
+        ):
+            candidates_by_root_event[root_event_id] = candidate
+
+    return list(candidates_by_root_event.values())
+
+@app.get("/health")
 def health_check():
     return {"status": "ok"}
 
-@app.get('/events')
+
+@app.get("/events")
 def get_events_endpoint():
     return get_events()
 
-@app.get('/events/correlated')
+
+@app.get("/events/correlated")
 def get_correlated_events():
     events = get_events()
     return correlate_events(events)
 
-@app.get('/events/correlated-across-devices')
+
+@app.get("/events/correlated-across-devices")
 def get_cross_device_correlated_events():
     events = get_events()
     dependencies = get_device_dependencies()
+    return correlate_events_across_devices(events, dependencies)
 
-    return correlate_events_across_devices(
-        events,
-        dependencies
-    )
 
-@app.get('/events/root-causes')
+@app.get("/events/root-causes")
 def get_root_causes():
     events = get_events()
     correlated_groups = correlate_events(events)
-
     results = []
 
     for group in correlated_groups:
         root_cause = find_root_cause(group["events"])
+        results.append(
+            {
+                "device_id": group["device_id"],
+                "root_cause": root_cause,
+                "events": group["events"],
+            }
+        )
 
-        results.append({
-            "device_id": group["device_id"],
-            "root_cause": root_cause,
-            "events": group["events"]
-        })
     return results
 
-@app.get('/events/incident-candidates')
-def get_incident_candidates():
-    events = get_events()
-    correlated_groups = correlate_events(events)
-    candidates = []
-    for group in correlated_groups:
-        candidate = detect_incident(group)
-        if candidate is not None:
-            candidates.append(candidate)
 
-    return candidates
+def get_detected_incident_candidates(events, dependencies):
+    per_device_groups = correlate_events(events)
+    cross_device_groups = correlate_events_across_devices(events, dependencies)
+    groups = per_device_groups + cross_device_groups
 
-# helper function
-def analyze_events_and_create_incidents():
-    events = get_events()
-    correlated_groups = correlate_events(events)
-    created_incidents = []
+    candidates_by_root_event = {}
 
-    for group in correlated_groups:
-        candidate = detect_incident(group)
-
+    for group in groups:
+        candidate = detect_incident(group, dependencies)
         if candidate is None:
             continue
-        existing_event = get_active_incident_by_device(
-            candidate["device_id"]
-        )
-        if existing_event is not None:
-            continue
-        incident_id = str(uuid.uuid4())
 
+        root_event_id = candidate["root_cause_event_id"]
+        existing = candidates_by_root_event.get(root_event_id)
+
+        # Prefer topology-supported analysis when both paths identify
+        # the same root-cause event.
+        if (
+            existing is None
+            or (
+                candidate["root_cause_reason"] == "topology_supported"
+                and existing["root_cause_reason"] != "topology_supported"
+            )
+        ):
+            candidates_by_root_event[root_event_id] = candidate
+
+    return list(candidates_by_root_event.values())
+
+
+@app.get("/events/incident-candidates")
+def get_incident_candidates():
+    events = get_events()
+    dependencies = get_device_dependencies()
+    return get_detected_incident_candidates(events, dependencies)
+
+
+def analyze_events_and_create_incidents():
+    events = get_events()
+    dependencies = get_device_dependencies()
+    candidates = get_detected_incident_candidates(events, dependencies)
+
+    created_incidents = []
+
+    for candidate in candidates:
+        existing_incident = get_active_incident_by_device(candidate["device_id"])
+
+        if existing_incident is not None:
+            current_reason = existing_incident.get("root_cause_reason")
+            new_reason = candidate["root_cause_reason"]
+
+            reason_strength = {
+                "priority_fallback": 1,
+                "topology_supported": 2,
+            }
+
+            current_strength = reason_strength.get(current_reason, 0)
+            new_strength = reason_strength.get(new_reason, 0)
+
+            if new_strength <= current_strength:
+                continue
+
+            updated_incident = update_incident_assessment(
+                existing_incident["id"],
+                candidate,
+            )
+
+            create_incident_history(
+                {
+                    "id": str(uuid.uuid4()),
+                    "incident_id": existing_incident["id"],
+                    "change_type": "ROOT_CAUSE_UPDATED",
+                    "severity": candidate["severity"],
+                    "root_cause_event_id": candidate["root_cause_event_id"],
+                    "root_cause_reason": candidate["root_cause_reason"],
+                    "root_cause_evidence": candidate["root_cause_evidence"],
+                }
+            )
+
+            updated_incident["affected_devices"] = candidate["affected_devices"]
+            created_incidents.append(updated_incident)
+            continue
+
+        incident_id = str(uuid.uuid4())
         new_incident = {
-            "id":incident_id,
-            "title":candidate["title"],
-            "severity":candidate["severity"],
+            "id": incident_id,
+            "title": candidate["title"],
+            "severity": candidate["severity"],
             "root_cause_event_id": candidate["root_cause_event_id"],
             "affected_devices": candidate["affected_devices"],
             "root_cause_reason": candidate["root_cause_reason"],
-            "root_cause_evidence": candidate["root_cause_evidence"]
+            "root_cause_evidence": candidate["root_cause_evidence"],
         }
 
         created_incident = create_incident(new_incident)
+
+        history_record = {
+            "id": str(uuid.uuid4()),
+            "incident_id": created_incident["id"],
+            "change_type": "INCIDENT_CREATED",
+            "severity": created_incident["severity"],
+            "root_cause_event_id": created_incident.get("root_cause_event_id"),
+            "root_cause_reason": created_incident.get("root_cause_reason"),
+            "root_cause_evidence": created_incident.get(
+                "root_cause_evidence", []
+            ),
+        }
+        create_incident_history(history_record)
+
         created_incident["affected_devices"] = candidate["affected_devices"]
         created_incidents.append(created_incident)
+
     return created_incidents
 
-@app.post('/events/create-incidents')
+
+@app.post("/events/create-incidents")
 def create_detected_incidents():
     return analyze_events_and_create_incidents()
 
-@app.get('/incidents/active/{device_id}')
+
+@app.get("/incidents/active/{device_id}")
 def get_active_incident_endpoint(device_id: str):
     return get_active_incident_by_device(device_id)
+
 
 @app.post("/events")
 def create_event_endpoint(event: EventCreate):
@@ -152,16 +263,15 @@ def create_event_endpoint(event: EventCreate):
     analyze_events_and_create_incidents()
     return created_event
 
-@app.get('/incidents')
+
+@app.get("/incidents")
 def get_incidents_endpoint():
     incidents = get_incidents()
     dependencies = get_device_dependencies()
     all_devices = get_devices()
 
-    device_name = {
-        device["id"]: device["name"]
-        for device in all_devices
-    }
+    device_name = {device["id"]: device["name"] for device in all_devices}
+
     for incident in incidents:
         device_id = incident.get("root_cause_device_id")
 
@@ -169,17 +279,13 @@ def get_incidents_endpoint():
             incident["affected_devices"] = []
             continue
 
-        affected_devices = find_affected_devices(
-            device_id,
-            dependencies
-        )
-
+        affected_devices = find_affected_devices(device_id, dependencies)
         incident["affected_devices"] = [
             {
                 "device_id": affected_id,
                 "device_name": device_name.get(affected_id),
                 "impact_level": "Direct" if depth == 1 else "Indirect",
-                "depth": depth
+                "depth": depth,
             }
             for affected_id, depth in affected_devices.items()
         ]
@@ -187,72 +293,63 @@ def get_incidents_endpoint():
     return incidents
 
 
-@app.post('/incidents')
+@app.post("/incidents")
 def create_incident_endpoint(incident: IncidentCreate):
     incident_id = str(uuid.uuid4())
-
     new_incident = {
         "id": incident_id,
         "title": incident.title,
         "severity": incident.severity,
-        "root_cause_event_id": None
+        "root_cause_event_id": None,
     }
-    created_incident = create_incident(new_incident)
-    return created_incident
+    return create_incident(new_incident)
 
-@app.patch('/incidents/{incident_id}')
+
+@app.patch("/incidents/{incident_id}")
 def update_incident_status_endpoint(
     incident_id: str,
-    update: IncidentStatusUpdate
+    update: IncidentStatusUpdate,
 ):
     incident = get_incident_by_id(incident_id)
 
     if incident is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Incident not found"
-        )
-    if not is_valid_incident_transition(incident['status'],update.status):
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    if not is_valid_incident_transition(incident["status"], update.status):
         raise HTTPException(
             status_code=400,
-            detail="Invalid incident status transition"
+            detail="Invalid incident status transition",
         )
-    updated_incident = update_incident_status(
+
+    return update_incident_status(
         incident_id,
-        incident['status'],
-        update.status
+        incident["status"],
+        update.status,
     )
-    return updated_incident
 
 
-@app.get('/incidents/{incident_id}/history')
+@app.get("/incidents/{incident_id}/history")
 def get_incident_history_endpoint(incident_id: str):
     incident = get_incident_by_id(incident_id)
+
     if incident is None:
-        raise HTTPException(
-            status_code = 404,
-            detail = "Incident not found"
-        )
+        raise HTTPException(status_code=404, detail="Incident not found")
+
     return get_incident_status_history(incident_id)
 
-@app.get('/topology/dependencies')
+
+@app.get("/topology/dependencies")
 def get_topology_dependencies():
     return get_device_dependencies()
 
-@app.get('/topology/impact/{device_id}')
+
+@app.get("/topology/impact/{device_id}")
 def get_device_impact(device_id: str):
     dependencies = get_device_dependencies()
-
-    affected_devices = find_affected_devices(
-        device_id, dependencies
-    )
-
+    affected_devices = find_affected_devices(device_id, dependencies)
     all_devices = get_devices()
+    device_names = {device["id"]: device["name"] for device in all_devices}
 
-    device_names = {
-        device["id"]: device["name"]
-        for device in all_devices
-    }
     return {
         "device_id": device_id,
         "device_name": device_names.get(device_id),
@@ -260,11 +357,9 @@ def get_device_impact(device_id: str):
             {
                 "device_id": affected_id,
                 "device_name": device_names.get(affected_id),
-                "impact_level": (
-                    "Direct" if depth == 1 else "Indirect"
-                ),
-                "depth": depth
+                "impact_level": "Direct" if depth == 1 else "Indirect",
+                "depth": depth,
             }
             for affected_id, depth in affected_devices.items()
-        ]
+        ],
     }

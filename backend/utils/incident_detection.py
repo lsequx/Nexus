@@ -1,11 +1,10 @@
-
 from database import get_device_dependencies
 from utils.correlation import analyze_root_cause
 from utils.topology import find_affected_devices
 
-
-def detect_incident(group):
-    dependencies = get_device_dependencies()
+def detect_incident(group, dependencies=None):
+    if dependencies is None:
+        dependencies = get_device_dependencies()
 
     analysis = analyze_root_cause(
         group["events"],
