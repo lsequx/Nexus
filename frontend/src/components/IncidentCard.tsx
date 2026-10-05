@@ -1,6 +1,7 @@
 import { getIncidentStatusColor, getSeverityColor } from "@/utils/status";
 
 import type { IncidentStatusHistory } from "@/types/incidentHistory";
+
 import type { Incident, IncidentStatus } from "@/types/incident";
 
 export default function IncidentCard({
@@ -11,15 +12,17 @@ export default function IncidentCard({
   root_cause_type,
   root_cause_severity,
   root_cause_device,
-  affected_devices,
+  observed_affected_devices,
+  potential_affected_devices,
   onStatusChange,
   incidentHistory,
 }: Incident & {
   onStatusChange: (newStatus: IncidentStatus) => void;
+
   incidentHistory: IncidentStatusHistory[];
 }) {
   return (
-    <div className="rounded-lg border p-4 space-y-3">
+    <div className="space-y-3 rounded-lg border p-4">
       <h2 className="text-xl font-semibold">{title}</h2>
 
       <p>
@@ -29,6 +32,7 @@ export default function IncidentCard({
         </span>
       </p>
 
+      {/* Root-cause analysis */}
       {root_cause_device ? (
         <>
           <p>
@@ -56,11 +60,18 @@ export default function IncidentCard({
         </p>
       )}
 
-      {affected_devices.length > 0 && (
+      {/* Observed impact */}
+      {observed_affected_devices.length > 0 && (
         <div className="space-y-2">
-          <h3 className="font-semibold">Affected Devices</h3>
+          <div>
+            <h3 className="font-semibold">Observed Affected Devices</h3>
 
-          {affected_devices.map((device) => (
+            <p className="text-xs text-gray-500">
+              Devices that produced network evidence supporting this incident.
+            </p>
+          </div>
+
+          {observed_affected_devices.map((device) => (
             <div
               key={device.device_id}
               className="rounded-md border p-2 text-sm"
@@ -77,6 +88,38 @@ export default function IncidentCard({
         </div>
       )}
 
+      {/* Potential topology impact */}
+      {potential_affected_devices.length > 0 && (
+        <div className="space-y-2">
+          <div>
+            <h3 className="font-semibold">Potential Impact Scope</h3>
+
+            <p className="text-xs text-gray-500">
+              Downstream devices that could be affected based on network
+              topology.
+            </p>
+          </div>
+
+          {potential_affected_devices.map((device) => (
+            <div
+              key={device.device_id}
+              className="rounded-md border p-2 text-sm"
+            >
+              <p className="font-medium">
+                {device.device_name ?? device.device_id}
+              </p>
+
+              <p className="text-gray-500">
+                Relationship: {device.impact_level}
+              </p>
+
+              <p className="text-gray-500">Dependency depth: {device.depth}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Incident lifecycle */}
       <p>
         Status:{" "}
         <span className={`font-semibold ${getIncidentStatusColor(status)}`}>
@@ -94,7 +137,7 @@ export default function IncidentCard({
       )}
 
       {status === "Investigating" && (
-        <>
+        <div className="flex gap-2">
           <button
             onClick={() => onStatusChange("Resolved")}
             className="rounded-lg border px-4 py-2"
@@ -108,7 +151,7 @@ export default function IncidentCard({
           >
             Close
           </button>
-        </>
+        </div>
       )}
 
       {status === "Resolved" && (
@@ -120,6 +163,7 @@ export default function IncidentCard({
         </button>
       )}
 
+      {/* Status history */}
       {incidentHistory.length > 0 && (
         <div className="space-y-2">
           <h3 className="font-semibold">Status History</h3>

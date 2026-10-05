@@ -1,6 +1,6 @@
 export type IncidentStatus = "Open" | "Investigating" | "Resolved" | "Closed";
 
-export type AffectedDevices = {
+export type ImpactedDevice = {
   device_id: string;
   device_name: string | null;
   impact_level: "Direct" | "Indirect";
@@ -18,5 +18,7 @@ export type Incident = {
   root_cause_type: string | null;
   root_cause_severity: string | null;
   root_cause_device: string | null;
-  affected_devices: AffectedDevices[];
+
+  observed_affected_devices: ImpactedDevice[];
+  potential_affected_devices: ImpactedDevice[];
 };

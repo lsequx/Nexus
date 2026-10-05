@@ -2,13 +2,16 @@ from database import get_device_dependencies
 from utils.correlation import analyze_root_cause
 from utils.topology import find_affected_devices
 
+
 def detect_incident(group, dependencies=None):
     if dependencies is None:
         dependencies = get_device_dependencies()
 
+    events = group["events"]
+
     analysis = analyze_root_cause(
-        group["events"],
-        dependencies
+        events,
+        dependencies,
     )
 
     root_cause = analysis["root_cause"]
@@ -19,9 +22,18 @@ def detect_incident(group, dependencies=None):
     if root_cause["severity"] != "Critical":
         return None
 
+    # A single isolated event is not enough evidence to create
+    # an incident when root-cause analysis only falls back to
+    # event priority.
+    if (
+        len(events) == 1
+        and analysis["reason"] == "priority_fallback"
+    ):
+        return None
+
     affected_devices = find_affected_devices(
         root_cause["device_id"],
-        dependencies
+        dependencies,
     )
 
     return {
@@ -32,6 +44,7 @@ def detect_incident(group, dependencies=None):
         "affected_devices": affected_devices,
         "root_cause_reason": analysis["reason"],
         "root_cause_evidence": [
-            event["id"] for event in analysis["evidence"]
-        ]
+            event["id"]
+            for event in analysis["evidence"]
+        ],
     }
