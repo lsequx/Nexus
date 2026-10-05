@@ -23,6 +23,8 @@ import {
   createEvent,
 } from "@/lib/api";
 
+import { simulationScenarios } from "@/data/scenarios";
+
 const systems = [
   {
     name: "Network",
@@ -38,29 +40,6 @@ const systems = [
   },
 ];
 
-const eventOptions = [
-  {
-    device_id: "dev-001",
-    type: "interface_down",
-    severity: "Critical",
-  },
-  {
-    device_id: "dev-002",
-    type: "device_unreachable",
-    severity: "Major",
-  },
-  {
-    device_id: "dev-003",
-    type: "high_latency",
-    severity: "Major",
-  },
-  {
-    device_id: "dev-004",
-    type: "packet_loss",
-    severity: "Minor",
-  },
-];
-
 export default function Home() {
   const [events, setEvents] = useState<Event[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -71,12 +50,23 @@ export default function Home() {
     Record<string, IncidentStatusHistory[]>
   >({});
 
+  const [selectedScenarioId, setSelectedScenarioId] = useState(
+    simulationScenarios[0].id,
+  );
+
+  const [isRunningScenario, setIsRunningScenario] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   const networkStatus = calculateNetworkStatus(incidents);
 
-  // Load events and incidents when the page first opens.
+  const selectedScenario =
+    simulationScenarios.find(
+      (scenario) => scenario.id === selectedScenarioId,
+    ) ?? simulationScenarios[0];
+
+  // Load the current network state when the page opens.
   useEffect(() => {
     const loadInitialData = async () => {
       try {
@@ -90,6 +80,7 @@ export default function Home() {
         setError(false);
       } catch (err) {
         console.error("Failed to load initial data:", err);
+
         setError(true);
       } finally {
         setLoading(false);
@@ -99,7 +90,8 @@ export default function Home() {
     loadInitialData();
   }, []);
 
-  // Fetch status history for incidents that do not have history loaded yet.
+  // Load status history for incidents that have not
+  // had their history loaded yet.
   useEffect(() => {
     const loadIncidentHistories = async () => {
       const incidentsWithoutHistory = incidents.filter(
@@ -131,6 +123,23 @@ export default function Home() {
     loadIncidentHistories();
   }, [incidents, incidentHistories]);
 
+  // Reload events and incidents after NEXUS performs
+  // correlation or incident detection.
+  const refreshNetworkData = async () => {
+    const [eventData, incidentData] = await Promise.all([
+      fetchEvents(),
+      fetchIncidents(),
+    ]);
+
+    setEvents(eventData);
+    setIncidents(incidentData);
+  };
+
+  // Manually create an incident.
+  //
+  // This remains useful as a manual incident-management
+  // demonstration. Because it is created manually rather than
+  // from network evidence, its root cause may be undetermined.
   const handleCreateIncident = async () => {
     try {
       const newIncident = await createIncident(
@@ -144,6 +153,7 @@ export default function Home() {
     }
   };
 
+  // Move an incident through its lifecycle.
   const handleStatusChange = async (
     incident: Incident,
     newStatus: Incident["status"],
@@ -173,22 +183,31 @@ export default function Home() {
     }
   };
 
-  const handleCreateEvent = async () => {
+  // Run a deterministic NEXUS scenario.
+  //
+  // Events are deliberately sent one at a time because
+  // POST /events triggers the backend correlation and
+  // incident-analysis pipeline after each new event.
+  const handleRunScenario = async () => {
+    if (isRunningScenario) {
+      return;
+    }
+
+    setIsRunningScenario(true);
+
     try {
-      const event =
-        eventOptions[Math.floor(Math.random() * eventOptions.length)];
+      for (const event of selectedScenario.events) {
+        await createEvent(event);
+      }
 
-      const newEvent = await createEvent(event);
-
-      setEvents((currentEvents) => [...currentEvents, newEvent]);
-
-      // Creating an event can trigger backend incident detection,
-      // so refresh the incident list after the event is created.
-      const refreshedIncidents = await fetchIncidents();
-
-      setIncidents(refreshedIncidents);
+      // A scenario can create a new incident or strengthen
+      // the root-cause assessment of an existing incident.
+      // Reload the authoritative state from the backend.
+      await refreshNetworkData();
     } catch (err) {
-      console.error("Failed to create event:", err);
+      console.error("Failed to run simulation scenario:", err);
+    } finally {
+      setIsRunningScenario(false);
     }
   };
 
@@ -216,11 +235,13 @@ export default function Home() {
         <div className="flex items-center gap-3">
           <select
             value={incidentSeverity}
-            onChange={(e) => setIncidentSeverity(e.target.value)}
+            onChange={(event) => setIncidentSeverity(event.target.value)}
             className="rounded-lg border bg-gray-900 px-7 py-2 text-white"
           >
             <option value="Critical">Critical</option>
+
             <option value="Major">Major</option>
+
             <option value="Minor">Minor</option>
           </select>
 
@@ -235,10 +256,61 @@ export default function Home() {
 
       <WelcomeCard />
 
-      {/* Incident cards */}
-      {incidents.length > 0 && (
-        <div className="space-y-4">
-          {incidents.map((incident) => (
+      {/* NEXUS intelligence scenario simulator */}
+      <section className="space-y-4 rounded-lg border p-4">
+        <div>
+          <h2 className="text-xl font-semibold">NEXUS Scenario Simulator</h2>
+
+          <p className="text-sm text-gray-400">
+            Generate controlled network events to test correlation, incident
+            detection, and root-cause analysis.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={selectedScenarioId}
+            disabled={isRunningScenario}
+            onChange={(event) => setSelectedScenarioId(event.target.value)}
+            className="rounded-lg border bg-gray-900 px-4 py-2 text-white"
+          >
+            {simulationScenarios.map((scenario) => (
+              <option key={scenario.id} value={scenario.id}>
+                {scenario.name}
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={handleRunScenario}
+            disabled={isRunningScenario}
+            className="rounded-lg border px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isRunningScenario ? "Running Scenario..." : "Run Scenario"}
+          </button>
+        </div>
+
+        <div className="rounded-md border p-3">
+          <p className="font-medium">{selectedScenario.name}</p>
+
+          <p className="mt-1 text-sm text-gray-400">
+            {selectedScenario.description}
+          </p>
+
+          <p className="mt-2 text-xs text-gray-500">
+            Events in scenario: {selectedScenario.events.length}
+          </p>
+        </div>
+      </section>
+
+      {/* Incidents */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold">Incidents</h2>
+
+        {incidents.length === 0 ? (
+          <p className="text-sm text-gray-400">No incidents detected.</p>
+        ) : (
+          incidents.map((incident) => (
             <IncidentCard
               key={incident.id}
               {...incident}
@@ -247,48 +319,50 @@ export default function Home() {
                 handleStatusChange(incident, newStatus)
               }
             />
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </section>
 
       {/* Network events */}
-      {loading ? (
-        <p>Loading Events...</p>
-      ) : error ? (
-        <p>Unable to load events.</p>
-      ) : (
-        <div className="space-y-4">
-          {[...events].reverse().map((event) => (
-            <EventCard
-              key={event.id}
-              id={event.id}
-              device={event.device}
-              type={event.type}
-              severity={event.severity}
-              timestamp={event.timestamp}
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold">Network Events</h2>
+
+        {loading ? (
+          <p>Loading Events...</p>
+        ) : error ? (
+          <p>Unable to load events.</p>
+        ) : events.length === 0 ? (
+          <p className="text-sm text-gray-400">No network events recorded.</p>
+        ) : (
+          <div className="space-y-4">
+            {[...events].reverse().map((event) => (
+              <EventCard
+                key={event.id}
+                id={event.id}
+                device={event.device}
+                type={event.type}
+                severity={event.severity}
+                timestamp={event.timestamp}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* System status */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold">System Status</h2>
+
+        <div className="flex gap-4">
+          {systems.map((system) => (
+            <StatusCard
+              key={system.name}
+              name={system.name}
+              status={system.name === "Network" ? networkStatus : system.status}
             />
           ))}
         </div>
-      )}
-
-      {/* Simulate a network event */}
-      <button
-        onClick={handleCreateEvent}
-        className="rounded-lg border px-4 py-2"
-      >
-        Simulate Event
-      </button>
-
-      {/* System status cards */}
-      <div className="flex gap-4">
-        {systems.map((system) => (
-          <StatusCard
-            key={system.name}
-            name={system.name}
-            status={system.name === "Network" ? networkStatus : system.status}
-          />
-        ))}
-      </div>
+      </section>
     </main>
   );
 }
