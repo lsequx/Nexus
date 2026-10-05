@@ -1,7 +1,7 @@
 import { getIncidentStatusColor, getSeverityColor } from "@/utils/status";
 
 import type { IncidentStatusHistory } from "@/types/incidentHistory";
-import type { Incident } from "@/types/incident";
+import type { Incident, IncidentStatus } from "@/types/incident";
 
 export default function IncidentCard({
   id,
@@ -15,7 +15,7 @@ export default function IncidentCard({
   onStatusChange,
   incidentHistory,
 }: Incident & {
-  onStatusChange: (newStatus: string) => void;
+  onStatusChange: (newStatus: IncidentStatus) => void;
   incidentHistory: IncidentStatusHistory[];
 }) {
   return (
@@ -38,12 +38,16 @@ export default function IncidentCard({
 
           <p>
             Root Cause Type:{" "}
-            <span className="font-semibold">{root_cause_type}</span>
+            <span className="font-semibold">
+              {root_cause_type ?? "Unknown"}
+            </span>
           </p>
 
           <p>
             Root Cause Severity:{" "}
-            <span className="font-semibold">{root_cause_severity}</span>
+            <span className="font-semibold">
+              {root_cause_severity ?? "Unknown"}
+            </span>
           </p>
         </>
       ) : (
@@ -52,7 +56,7 @@ export default function IncidentCard({
         </p>
       )}
 
-      {affected_devices && affected_devices.length > 0 && (
+      {affected_devices.length > 0 && (
         <div className="space-y-2">
           <h3 className="font-semibold">Affected Devices</h3>
 
@@ -61,7 +65,9 @@ export default function IncidentCard({
               key={device.device_id}
               className="rounded-md border p-2 text-sm"
             >
-              <p className="font-medium">{device.device_name}</p>
+              <p className="font-medium">
+                {device.device_name ?? device.device_id}
+              </p>
 
               <p className="text-gray-500">Impact: {device.impact_level}</p>
 
@@ -86,6 +92,7 @@ export default function IncidentCard({
           Investigate
         </button>
       )}
+
       {status === "Investigating" && (
         <>
           <button
@@ -94,6 +101,7 @@ export default function IncidentCard({
           >
             Resolve
           </button>
+
           <button
             onClick={() => onStatusChange("Closed")}
             className="rounded-lg border px-4 py-2"
@@ -102,23 +110,26 @@ export default function IncidentCard({
           </button>
         </>
       )}
+
       {status === "Resolved" && (
         <button
           onClick={() => onStatusChange("Closed")}
           className="rounded-lg border px-4 py-2"
         >
-          Closed
+          Close
         </button>
       )}
 
       {incidentHistory.length > 0 && (
         <div className="space-y-2">
-          <h3 className="font-semibold">Status Historry</h3>
+          <h3 className="font-semibold">Status History</h3>
+
           {incidentHistory.map((history) => (
             <div key={history.id} className="text-sm text-gray-400">
               <p>
-                {history.old_status} → {history.new_status}
+                {history.old_status ?? "Created"} → {history.new_status}
               </p>
+
               <p>{new Date(history.changed_at).toLocaleString()}</p>
             </div>
           ))}

@@ -1,7 +1,13 @@
-// network status -> impact
-import type { Incident } from "@/types/incident";
+import type { IncidentStatus } from "@/types/incident";
 
-export function calculateNetworkStatus(incidents: Incident[]): string {
+type NetworkStatusIncident = {
+  status: IncidentStatus;
+  severity: string;
+};
+
+export function calculateNetworkStatus(
+  incidents: NetworkStatusIncident[],
+): string {
   const activeIncidents = incidents.filter(
     (incident) =>
       incident.status === "Open" || incident.status === "Investigating",
@@ -10,8 +16,10 @@ export function calculateNetworkStatus(incidents: Incident[]): string {
   if (activeIncidents.some((incident) => incident.severity === "Critical")) {
     return "Critical";
   }
+
   if (activeIncidents.length > 0) {
     return "Degraded";
   }
+
   return "Operational";
 }

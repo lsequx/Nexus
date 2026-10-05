@@ -84,6 +84,41 @@ def get_detected_incident_candidates(events, dependencies):
 
     return list(candidates_by_root_event.values())
 
+def enrich_incident(incident, dependencies=None, all_devices=None):
+    if dependencies is None:
+        dependencies = get_device_dependencies()
+
+    if all_devices is None:
+        all_devices = get_devices()
+
+    device_names = {
+        device["id"]: device["name"]
+        for device in all_devices
+    }
+
+    device_id = incident.get("root_cause_device_id")
+
+    if device_id is None:
+        incident["affected_devices"] = []
+        return incident
+
+    affected_devices = find_affected_devices(
+        device_id,
+        dependencies,
+    )
+
+    incident["affected_devices"] = [
+        {
+            "device_id": affected_id,
+            "device_name": device_names.get(affected_id),
+            "impact_level": "Direct" if depth == 1 else "Indirect",
+            "depth": depth,
+        }
+        for affected_id, depth in affected_devices.items()
+    ]
+
+    return incident
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
@@ -124,36 +159,6 @@ def get_root_causes():
         )
 
     return results
-
-
-def get_detected_incident_candidates(events, dependencies):
-    per_device_groups = correlate_events(events)
-    cross_device_groups = correlate_events_across_devices(events, dependencies)
-    groups = per_device_groups + cross_device_groups
-
-    candidates_by_root_event = {}
-
-    for group in groups:
-        candidate = detect_incident(group, dependencies)
-        if candidate is None:
-            continue
-
-        root_event_id = candidate["root_cause_event_id"]
-        existing = candidates_by_root_event.get(root_event_id)
-
-        # Prefer topology-supported analysis when both paths identify
-        # the same root-cause event.
-        if (
-            existing is None
-            or (
-                candidate["root_cause_reason"] == "topology_supported"
-                and existing["root_cause_reason"] != "topology_supported"
-            )
-        ):
-            candidates_by_root_event[root_event_id] = candidate
-
-    return list(candidates_by_root_event.values())
-
 
 @app.get("/events/incident-candidates")
 def get_incident_candidates():
@@ -270,40 +275,31 @@ def get_incidents_endpoint():
     dependencies = get_device_dependencies()
     all_devices = get_devices()
 
-    device_name = {device["id"]: device["name"] for device in all_devices}
-
-    for incident in incidents:
-        device_id = incident.get("root_cause_device_id")
-
-        if device_id is None:
-            incident["affected_devices"] = []
-            continue
-
-        affected_devices = find_affected_devices(device_id, dependencies)
-        incident["affected_devices"] = [
-            {
-                "device_id": affected_id,
-                "device_name": device_name.get(affected_id),
-                "impact_level": "Direct" if depth == 1 else "Indirect",
-                "depth": depth,
-            }
-            for affected_id, depth in affected_devices.items()
-        ]
-
-    return incidents
-
+    return [
+        enrich_incident(
+            incident,
+            dependencies,
+            all_devices,
+        )
+        for incident in incidents
+    ]
 
 @app.post("/incidents")
 def create_incident_endpoint(incident: IncidentCreate):
     incident_id = str(uuid.uuid4())
+
     new_incident = {
         "id": incident_id,
         "title": incident.title,
         "severity": incident.severity,
         "root_cause_event_id": None,
     }
-    return create_incident(new_incident)
 
+    create_incident(new_incident)
+
+    created_incident = get_incident_by_id(incident_id)
+
+    return enrich_incident(created_incident)
 
 @app.patch("/incidents/{incident_id}")
 def update_incident_status_endpoint(
@@ -313,19 +309,29 @@ def update_incident_status_endpoint(
     incident = get_incident_by_id(incident_id)
 
     if incident is None:
-        raise HTTPException(status_code=404, detail="Incident not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found",
+        )
 
-    if not is_valid_incident_transition(incident["status"], update.status):
+    if not is_valid_incident_transition(
+        incident["status"],
+        update.status,
+    ):
         raise HTTPException(
             status_code=400,
             detail="Invalid incident status transition",
         )
 
-    return update_incident_status(
+    update_incident_status(
         incident_id,
         incident["status"],
         update.status,
     )
+
+    updated_incident = get_incident_by_id(incident_id)
+
+    return enrich_incident(updated_incident)
 
 
 @app.get("/incidents/{incident_id}/history")

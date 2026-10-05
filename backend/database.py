@@ -244,21 +244,35 @@ def get_incident_by_id(incident_id):
         cursor.execute(
             """
             SELECT
-                id,
-                title,
-                severity,
-                status,
-                root_cause_event_id,
-                created_at,
-                root_cause_reason,
-                root_cause_evidence
+                incidents.id,
+                incidents.title,
+                incidents.severity,
+                incidents.status,
+                incidents.created_at,
+                incidents.root_cause_reason,
+                incidents.root_cause_evidence,
+
+                events.id AS root_cause_event_id,
+                events.type AS root_cause_type,
+                events.severity AS root_cause_severity,
+
+                devices.id AS root_cause_device_id,
+                devices.name AS root_cause_device
+
             FROM incidents
-            WHERE id = %s
+
+            LEFT JOIN events
+                ON incidents.root_cause_event_id = events.id
+
+            LEFT JOIN devices
+                ON events.device_id = devices.id
+
+            WHERE incidents.id = %s
             """,
             (incident_id,),
         )
-        incident = cursor.fetchone()
-        return incident
+
+        return cursor.fetchone()
 
 
 def get_incident_by_root_cause(root_cause_event_id):

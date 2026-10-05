@@ -1,15 +1,27 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import WelcomeCard from "@/components/WelcomeCard";
 import StatusCard from "@/components/StatusCard";
-import { getStatusColor } from "@/utils/status";
-import { useEffect, useState } from "react";
 import IncidentCard from "@/components/IncidentCard";
 import EventCard from "@/components/EventCard";
+
+import { getStatusColor } from "@/utils/status";
+import { calculateNetworkStatus } from "@/utils/networkStatus";
+
 import type { Event } from "@/types/event";
 import type { Incident } from "@/types/incident";
 import type { IncidentStatusHistory } from "@/types/incidentHistory";
-import { calculateNetworkStatus } from "@/utils/networkStatus";
+
+import {
+  fetchEvents,
+  fetchIncidents,
+  fetchIncidentHistory,
+  createIncident,
+  updateIncidentStatus,
+  createEvent,
+} from "@/lib/api";
 
 const systems = [
   {
@@ -53,8 +65,6 @@ export default function Home() {
   const [events, setEvents] = useState<Event[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
 
-  const networkStatus = calculateNetworkStatus(incidents);
-
   const [incidentSeverity, setIncidentSeverity] = useState("Critical");
 
   const [incidentHistories, setIncidentHistories] = useState<
@@ -64,42 +74,34 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  // Fetch events and incidents when the page loads.
-  useEffect(() => {
-    fetch("http://127.0.0.1:8000/events")
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Failed to fetch events");
-        }
-        return response.json();
-      })
-      .then((data) => {
-        setEvents(data);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError(true);
-        setLoading(false);
-      });
+  const networkStatus = calculateNetworkStatus(incidents);
 
-    fetch("http://127.0.0.1:8000/incidents")
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Failed to fetch incidents");
-        }
-        return response.json();
-      })
-      .then((data) => {
-        setIncidents(data);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch incidents:", err);
-      });
+  // Load events and incidents when the page first opens.
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const [eventData, incidentData] = await Promise.all([
+          fetchEvents(),
+          fetchIncidents(),
+        ]);
+
+        setEvents(eventData);
+        setIncidents(incidentData);
+        setError(false);
+      } catch (err) {
+        console.error("Failed to load initial data:", err);
+        setError(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInitialData();
   }, []);
 
-  // Fetch status history separately for every incident.
+  // Fetch status history for incidents that do not have history loaded yet.
   useEffect(() => {
-    const fetchHistories = async () => {
+    const loadIncidentHistories = async () => {
       const incidentsWithoutHistory = incidents.filter(
         (incident) => !(incident.id in incidentHistories),
       );
@@ -108,32 +110,87 @@ export default function Home() {
         return;
       }
 
-      const historyResults = await Promise.all(
-        incidentsWithoutHistory.map(async (incident) => {
-          const response = await fetch(
-            `http://127.0.0.1:8000/incidents/${incident.id}/history`,
-          );
+      try {
+        const historyResults = await Promise.all(
+          incidentsWithoutHistory.map(async (incident) => {
+            const history = await fetchIncidentHistory(incident.id);
 
-          if (!response.ok) {
-            throw new Error(
-              `Failed to fetch history for incident ${incident.id}`,
-            );
-          }
+            return [incident.id, history] as const;
+          }),
+        );
 
-          const data: IncidentStatusHistory[] = await response.json();
+        setIncidentHistories((current) => ({
+          ...current,
+          ...Object.fromEntries(historyResults),
+        }));
+      } catch (err) {
+        console.error("Failed to load incident history:", err);
+      }
+    };
 
-          return [incident.id, data] as const;
-        }),
+    loadIncidentHistories();
+  }, [incidents, incidentHistories]);
+
+  const handleCreateIncident = async () => {
+    try {
+      const newIncident = await createIncident(
+        `${incidentSeverity} Network Incident`,
+        incidentSeverity,
       );
+
+      setIncidents((currentIncidents) => [newIncident, ...currentIncidents]);
+    } catch (err) {
+      console.error("Failed to create incident:", err);
+    }
+  };
+
+  const handleStatusChange = async (
+    incident: Incident,
+    newStatus: Incident["status"],
+  ) => {
+    try {
+      const updatedIncident = await updateIncidentStatus(
+        incident.id,
+        newStatus,
+      );
+
+      setIncidents((currentIncidents) =>
+        currentIncidents.map((currentIncident) =>
+          currentIncident.id === updatedIncident.id
+            ? updatedIncident
+            : currentIncident,
+        ),
+      );
+
+      const updatedHistory = await fetchIncidentHistory(incident.id);
 
       setIncidentHistories((current) => ({
         ...current,
-        ...Object.fromEntries(historyResults),
+        [incident.id]: updatedHistory,
       }));
-    };
+    } catch (err) {
+      console.error("Failed to update incident status:", err);
+    }
+  };
 
-    fetchHistories().catch(console.error);
-  }, [incidents, incidentHistories]);
+  const handleCreateEvent = async () => {
+    try {
+      const event =
+        eventOptions[Math.floor(Math.random() * eventOptions.length)];
+
+      const newEvent = await createEvent(event);
+
+      setEvents((currentEvents) => [...currentEvents, newEvent]);
+
+      // Creating an event can trigger backend incident detection,
+      // so refresh the incident list after the event is created.
+      const refreshedIncidents = await fetchIncidents();
+
+      setIncidents(refreshedIncidents);
+    } catch (err) {
+      console.error("Failed to create event:", err);
+    }
+  };
 
   return (
     <main className="min-h-screen space-y-6 p-8">
@@ -166,31 +223,9 @@ export default function Home() {
             <option value="Major">Major</option>
             <option value="Minor">Minor</option>
           </select>
+
           <button
-            onClick={async () => {
-              const response = await fetch("http://127.0.0.1:8000/incidents", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  title: `${incidentSeverity} Network Incident`,
-                  severity: incidentSeverity,
-                }),
-              });
-
-              if (!response.ok) {
-                console.error("Failed to create incident");
-                return;
-              }
-
-              const newIncident = await response.json();
-
-              setIncidents((currentIncidents) => [
-                newIncident,
-                ...currentIncidents,
-              ]);
-            }}
+            onClick={handleCreateIncident}
             className="rounded-lg border px-4 py-2"
           >
             Simulate Incident
@@ -208,58 +243,9 @@ export default function Home() {
               key={incident.id}
               {...incident}
               incidentHistory={incidentHistories[incident.id] ?? []}
-              onStatusChange={async (newStatus) => {
-                const response = await fetch(
-                  `http://127.0.0.1:8000/incidents/${incident.id}`,
-                  {
-                    method: "PATCH",
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      status: newStatus,
-                    }),
-                  },
-                );
-
-                if (!response.ok) {
-                  console.error("Failed to update incident status");
-                  return;
-                }
-
-                const updatedIncident = await response.json();
-
-                console.log("Updated incident:", updatedIncident);
-
-                setIncidents((currentIncidents) =>
-                  currentIncidents.map((currentIncident) =>
-                    currentIncident.id === updatedIncident.id
-                      ? {
-                          ...currentIncident,
-                          ...updatedIncident,
-                        }
-                      : currentIncident,
-                  ),
-                );
-
-                // Fetch the updated history for this incident only.
-                const historyResponse = await fetch(
-                  `http://127.0.0.1:8000/incidents/${incident.id}/history`,
-                );
-
-                if (!historyResponse.ok) {
-                  console.error("Failed to fetch updated history");
-                  return;
-                }
-
-                const updatedHistory: IncidentStatusHistory[] =
-                  await historyResponse.json();
-
-                setIncidentHistories((current) => ({
-                  ...current,
-                  [incident.id]: updatedHistory,
-                }));
-              }}
+              onStatusChange={(newStatus) =>
+                handleStatusChange(incident, newStatus)
+              }
             />
           ))}
         </div>
@@ -287,27 +273,7 @@ export default function Home() {
 
       {/* Simulate a network event */}
       <button
-        onClick={async () => {
-          const event =
-            eventOptions[Math.floor(Math.random() * eventOptions.length)];
-
-          const response = await fetch("http://127.0.0.1:8000/events", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(event),
-          });
-
-          if (!response.ok) {
-            console.error("Failed to create event");
-            return;
-          }
-
-          const newEvent = await response.json();
-
-          setEvents((currentEvents) => [...currentEvents, newEvent]);
-        }}
+        onClick={handleCreateEvent}
         className="rounded-lg border px-4 py-2"
       >
         Simulate Event
