@@ -12,6 +12,10 @@ export default function IncidentCard({
   root_cause_type,
   root_cause_severity,
   root_cause_device,
+  detection_reason,
+  confidence,
+  evidence_count,
+  evidence_events,
   observed_affected_devices,
   potential_affected_devices,
   onStatusChange,
@@ -22,7 +26,7 @@ export default function IncidentCard({
   incidentHistory: IncidentStatusHistory[];
 }) {
   return (
-    <div className="space-y-3 rounded-lg border p-4">
+    <div className="space-y-4 rounded-lg border p-4">
       <h2 className="text-xl font-semibold">{title}</h2>
 
       <p>
@@ -60,6 +64,54 @@ export default function IncidentCard({
         </p>
       )}
 
+      {/* Explainable incident intelligence */}
+      <div className="space-y-2 rounded-md border p-3">
+        <h3 className="font-semibold">NEXUS Analysis</h3>
+
+        <p className="text-sm">
+          Detection Reason:{" "}
+          <span className="font-semibold">{detection_reason}</span>
+        </p>
+
+        <p className="text-sm">
+          Confidence: <span className="font-semibold">{confidence}</span>
+        </p>
+
+        <p className="text-sm">
+          Supporting Evidence Events:{" "}
+          <span className="font-semibold">{evidence_count}</span>
+        </p>
+      </div>
+
+      {/* Evidence events */}
+      {evidence_events.length > 0 && (
+        <div className="space-y-2">
+          <div>
+            <h3 className="font-semibold">Supporting Evidence</h3>
+
+            <p className="text-xs text-gray-500">
+              Network signals that contributed to the NEXUS incident decision.
+            </p>
+          </div>
+
+          {evidence_events.map((event) => (
+            <div key={event.id} className="rounded-md border p-2 text-sm">
+              <p className="font-medium">
+                {event.device_name ?? event.device_id ?? "Unknown device"}
+              </p>
+
+              <p className="text-gray-500">Event: {event.type}</p>
+
+              <p className="text-gray-500">Severity: {event.severity}</p>
+
+              <p className="text-gray-500">
+                Time: {new Date(event.timestamp).toLocaleString()}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Observed impact */}
       {observed_affected_devices.length > 0 && (
         <div className="space-y-2">
@@ -67,7 +119,8 @@ export default function IncidentCard({
             <h3 className="font-semibold">Observed Affected Devices</h3>
 
             <p className="text-xs text-gray-500">
-              Devices that produced network evidence supporting this incident.
+              Devices that produced downstream network evidence supporting this
+              incident.
             </p>
           </div>
 

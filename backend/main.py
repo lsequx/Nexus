@@ -131,7 +131,6 @@ def get_detected_incident_candidates(
 # ---------------------------------------------------------
 # Incident API enrichment
 # ---------------------------------------------------------
-
 def enrich_incident(
     incident,
     dependencies=None,
@@ -163,8 +162,115 @@ def enrich_incident(
         "root_cause_device_id"
     )
 
-    # Manual incidents may not have a
-    # root-cause event or device.
+    root_cause_reason = incident.get(
+        "root_cause_reason"
+    )
+
+    evidence_event_ids = (
+        incident.get(
+            "root_cause_evidence"
+        )
+        or []
+    )
+
+    # -----------------------------------------------------
+    # Explainability
+    # -----------------------------------------------------
+
+    if (
+        root_cause_reason
+        == "topology_supported"
+    ):
+        detection_reason = (
+            "Topology Supported"
+        )
+        confidence = "High"
+
+    elif (
+        root_cause_reason
+        == "priority_fallback"
+    ):
+        detection_reason = (
+            "Repeated Device Evidence"
+        )
+        confidence = "Medium"
+
+    else:
+        detection_reason = (
+            "Manual / Undetermined"
+        )
+        confidence = "Unknown"
+
+    evidence_events = []
+
+    for event_id in evidence_event_ids:
+        evidence_event = (
+            event_by_id.get(event_id)
+        )
+
+        if evidence_event is None:
+            continue
+
+        evidence_device_id = (
+            evidence_event.get(
+                "device_id"
+            )
+        )
+
+        evidence_events.append(
+            {
+                "id": (
+                    evidence_event["id"]
+                ),
+                "device_id": (
+                    evidence_device_id
+                ),
+                "device_name": (
+                    device_names.get(
+                        evidence_device_id
+                    )
+                    or evidence_event.get(
+                        "device"
+                    )
+                ),
+                "type": (
+                    evidence_event[
+                        "type"
+                    ]
+                ),
+                "severity": (
+                    evidence_event[
+                        "severity"
+                    ]
+                ),
+                "timestamp": (
+                    evidence_event[
+                        "timestamp"
+                    ]
+                ),
+            }
+        )
+
+    incident[
+        "detection_reason"
+    ] = detection_reason
+
+    incident[
+        "confidence"
+    ] = confidence
+
+    incident[
+        "evidence_count"
+    ] = len(evidence_events)
+
+    incident[
+        "evidence_events"
+    ] = evidence_events
+
+    # -----------------------------------------------------
+    # Manual incidents do not have a root-cause device.
+    # -----------------------------------------------------
+
     if root_device_id is None:
         incident[
             "observed_affected_devices"
@@ -177,11 +283,7 @@ def enrich_incident(
         return incident
 
     # -----------------------------------------------------
-    # Potential impact
-    #
-    # These devices are downstream of the root cause.
-    # They may be affected based on topology, but NEXUS
-    # has not necessarily observed evidence from them.
+    # Potential topology impact
     # -----------------------------------------------------
 
     potential_devices = (
@@ -213,41 +315,28 @@ def enrich_incident(
     ]
 
     # -----------------------------------------------------
-    # Observed impact
+    # Observed affected devices
     #
-    # root_cause_evidence contains event IDs that
-    # actually supported the root-cause assessment.
-    # Convert those evidence events into device IDs.
+    # Only topology evidence from devices downstream of
+    # the root cause counts as observed network impact.
+    #
+    # Repeated signals from the root-cause device itself
+    # are still shown above under Evidence Events, but
+    # should not be labelled as an affected device.
     # -----------------------------------------------------
-
-    evidence_event_ids = (
-        incident.get(
-            "root_cause_evidence"
-        )
-        or []
-    )
 
     observed_device_ids = []
 
-    for event_id in evidence_event_ids:
-        evidence_event = (
-            event_by_id.get(event_id)
-        )
-
-        if evidence_event is None:
-            continue
-
+    for evidence_event in evidence_events:
         evidence_device_id = (
-            evidence_event.get(
+            evidence_event[
                 "device_id"
-            )
+            ]
         )
 
         if evidence_device_id is None:
             continue
 
-        # The root-cause device itself should not
-        # be listed as an affected device.
         if (
             evidence_device_id
             == root_device_id
@@ -269,10 +358,6 @@ def enrich_incident(
             device_id
         )
 
-        # Current topology-supported evidence should
-        # always be downstream of the root cause.
-        # If an unexpected evidence device is found,
-        # skip it rather than claiming topology impact.
         if depth is None:
             continue
 
@@ -302,7 +387,6 @@ def enrich_incident(
     ] = potential_affected_devices
 
     return incident
-
 
 # ---------------------------------------------------------
 # Health

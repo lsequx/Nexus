@@ -22,9 +22,8 @@ def detect_incident(group, dependencies=None):
     if root_cause["severity"] != "Critical":
         return None
 
-    # A single isolated event is not enough evidence to create
-    # an incident when root-cause analysis only falls back to
-    # event priority.
+    # A single isolated Critical event is not enough
+    # evidence when detection only has a priority fallback.
     if (
         len(events) == 1
         and analysis["reason"] == "priority_fallback"
@@ -36,8 +35,29 @@ def detect_incident(group, dependencies=None):
         dependencies,
     )
 
+    # Topology-supported analysis already tells us which
+    # downstream events supported the root-cause decision.
+    if analysis["reason"] == "topology_supported":
+        evidence_events = analysis["evidence"]
+
+    # For repeated same-device failures, preserve every
+    # correlated event other than the root-cause event
+    # as supporting evidence.
+    elif analysis["reason"] == "priority_fallback":
+        evidence_events = [
+            event
+            for event in events
+            if event["id"] != root_cause["id"]
+        ]
+
+    else:
+        evidence_events = []
+
     return {
-        "title": f"Network Incident - {root_cause['device_id']}",
+        "title": (
+            f"Network Incident - "
+            f"{root_cause['device_id']}"
+        ),
         "severity": root_cause["severity"],
         "root_cause_event_id": root_cause["id"],
         "device_id": root_cause["device_id"],
@@ -45,6 +65,6 @@ def detect_incident(group, dependencies=None):
         "root_cause_reason": analysis["reason"],
         "root_cause_evidence": [
             event["id"]
-            for event in analysis["evidence"]
+            for event in evidence_events
         ],
     }
