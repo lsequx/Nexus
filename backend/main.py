@@ -30,6 +30,11 @@ from utils.incident import is_valid_incident_transition
 from utils.incident_detection import detect_incident
 from utils.topology import find_affected_devices
 
+from utils.confidence import (
+    calculate_confidence_score,
+    get_confidence_label,
+)
+
 
 app = FastAPI()
 
@@ -131,6 +136,7 @@ def get_detected_incident_candidates(
 # ---------------------------------------------------------
 # Incident API enrichment
 # ---------------------------------------------------------
+
 def enrich_incident(
     incident,
     dependencies=None,
@@ -174,7 +180,7 @@ def enrich_incident(
     )
 
     # -----------------------------------------------------
-    # Explainability
+    # Detection explanation
     # -----------------------------------------------------
 
     if (
@@ -184,7 +190,6 @@ def enrich_incident(
         detection_reason = (
             "Topology Supported"
         )
-        confidence = "High"
 
     elif (
         root_cause_reason
@@ -193,13 +198,15 @@ def enrich_incident(
         detection_reason = (
             "Repeated Device Evidence"
         )
-        confidence = "Medium"
 
     else:
         detection_reason = (
             "Manual / Undetermined"
         )
-        confidence = "Unknown"
+
+    # -----------------------------------------------------
+    # Supporting evidence
+    # -----------------------------------------------------
 
     evidence_events = []
 
@@ -251,6 +258,23 @@ def enrich_incident(
             }
         )
 
+    # -----------------------------------------------------
+    # Numeric confidence scoring
+    # -----------------------------------------------------
+
+    confidence_score = (
+        calculate_confidence_score(
+            root_cause_reason,
+            len(evidence_events),
+        )
+    )
+
+    confidence = (
+        get_confidence_label(
+            confidence_score
+        )
+    )
+
     incident[
         "detection_reason"
     ] = detection_reason
@@ -258,6 +282,10 @@ def enrich_incident(
     incident[
         "confidence"
     ] = confidence
+
+    incident[
+        "confidence_score"
+    ] = confidence_score
 
     incident[
         "evidence_count"
@@ -268,7 +296,7 @@ def enrich_incident(
     ] = evidence_events
 
     # -----------------------------------------------------
-    # Manual incidents do not have a root-cause device.
+    # Manual incidents may not have a root-cause device.
     # -----------------------------------------------------
 
     if root_device_id is None:
@@ -317,12 +345,11 @@ def enrich_incident(
     # -----------------------------------------------------
     # Observed affected devices
     #
-    # Only topology evidence from devices downstream of
-    # the root cause counts as observed network impact.
+    # Evidence coming from a downstream device represents
+    # observed impact.
     #
-    # Repeated signals from the root-cause device itself
-    # are still shown above under Evidence Events, but
-    # should not be labelled as an affected device.
+    # Evidence from the root-cause device itself still
+    # supports the diagnosis but is not an affected device.
     # -----------------------------------------------------
 
     observed_device_ids = []
@@ -387,6 +414,7 @@ def enrich_incident(
     ] = potential_affected_devices
 
     return incident
+
 
 # ---------------------------------------------------------
 # Health
@@ -480,7 +508,7 @@ def get_incident_candidates():
 
 
 # ---------------------------------------------------------
-# Automated event analysis
+# Automated incident analysis
 # ---------------------------------------------------------
 
 def analyze_events_and_create_incidents():
@@ -587,9 +615,6 @@ def analyze_events_and_create_incidents():
                 }
             )
 
-            # Internal analysis result.
-            # API enrichment later separates
-            # observed vs potential impact.
             updated_incident[
                 "affected_devices"
             ] = candidate[
@@ -679,7 +704,6 @@ def analyze_events_and_create_incidents():
             history_record
         )
 
-        # Internal analysis result.
         created_incident[
             "affected_devices"
         ] = candidate[
@@ -809,9 +833,7 @@ def update_incident_status_endpoint(
     if incident is None:
         raise HTTPException(
             status_code=404,
-            detail=(
-                "Incident not found"
-            ),
+            detail="Incident not found",
         )
 
     if not is_valid_incident_transition(

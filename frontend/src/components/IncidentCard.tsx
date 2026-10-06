@@ -14,6 +14,7 @@ export default function IncidentCard({
   root_cause_device,
   detection_reason,
   confidence,
+  confidence_score,
   evidence_count,
   evidence_events,
   observed_affected_devices,
@@ -78,12 +79,17 @@ export default function IncidentCard({
         </p>
 
         <p className="text-sm">
+          Confidence Score:{" "}
+          <span className="font-semibold">{confidence_score}/100</span>
+        </p>
+
+        <p className="text-sm">
           Supporting Evidence Events:{" "}
           <span className="font-semibold">{evidence_count}</span>
         </p>
       </div>
 
-      {/* Evidence events */}
+      {/* Supporting evidence */}
       {evidence_events.length > 0 && (
         <div className="space-y-2">
           <div>

@@ -1,6 +1,6 @@
 export type IncidentStatus = "Open" | "Investigating" | "Resolved" | "Closed";
 
-export type IncidentConfidence = "High" | "Medium" | "Unknown";
+export type IncidentConfidence = "High" | "Medium" | "Low" | "Unknown";
 
 export type ImpactedDevice = {
   device_id: string;
@@ -31,7 +31,9 @@ export type Incident = {
   root_cause_device: string | null;
 
   detection_reason: string;
+
   confidence: IncidentConfidence;
+  confidence_score: number;
 
   evidence_count: number;
   evidence_events: IncidentEvidenceEvent[];
