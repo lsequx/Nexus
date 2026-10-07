@@ -200,8 +200,8 @@ The frontend and backend are fully decoupled and communicate only through the RE
 ### Run with Docker Compose
 
 ```bash
-git clone https://github.com/lsequx/nexus-network-intelligence.git
-cd nexus-network-intelligence
+git clone https://github.com/lsequx/nexus.git
+cd nexus
 
 docker compose up --build
 ```
@@ -265,7 +265,7 @@ NEXUS ships with scripted scenarios so its reasoning can be demonstrated and reg
 ## Project Structure
 
 ```
-nexus-network-intelligence/
+nexus/
 ├── backend/      # FastAPI service: REST API, auth, correlation / RCA / scoring engine
 ├── frontend/     # Next.js app: dashboard, incident workspace, topology, scenarios
 └── README.md
