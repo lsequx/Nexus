@@ -390,6 +390,45 @@ def get_devices():
         )
         return cursor.fetchall()
 
+def get_incident_analysis_history(
+    incident_id,
+):
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                id,
+                incident_id,
+                change_type,
+                severity,
+                root_cause_event_id,
+                root_cause_reason,
+                root_cause_evidence,
+                created_at
+            FROM incident_history
+            WHERE incident_id = %s
+            ORDER BY created_at ASC
+            """,
+            (incident_id,),
+        )
+
+        rows = cursor.fetchall()
+
+    return [
+        {
+            "id": row[0],
+            "incident_id": row[1],
+            "change_type": row[2],
+            "severity": row[3],
+            "root_cause_event_id": row[4],
+            "root_cause_reason": row[5],
+            "root_cause_evidence": (
+                row[6] or []
+            ),
+            "created_at": row[7],
+        }
+        for row in rows
+    ]
 
 
 

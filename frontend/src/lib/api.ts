@@ -1,6 +1,10 @@
 import type { Event } from "@/types/event";
+
 import type { Incident, IncidentStatus } from "@/types/incident";
+
 import type { IncidentStatusHistory } from "@/types/incidentHistory";
+
+import type { IncidentAnalysisHistory } from "@/types/incidentAnalysisHistory";
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 
@@ -28,6 +32,14 @@ export function fetchIncidentHistory(
   incidentId: string,
 ): Promise<IncidentStatusHistory[]> {
   return request<IncidentStatusHistory[]>(`/incidents/${incidentId}/history`);
+}
+
+export function fetchIncidentAnalysisHistory(
+  incidentId: string,
+): Promise<IncidentAnalysisHistory[]> {
+  return request<IncidentAnalysisHistory[]>(
+    `/incidents/${incidentId}/analysis-history`,
+  );
 }
 
 export function createIncident(

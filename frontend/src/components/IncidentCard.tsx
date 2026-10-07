@@ -2,6 +2,8 @@ import { getIncidentStatusColor, getSeverityColor } from "@/utils/status";
 
 import type { IncidentStatusHistory } from "@/types/incidentHistory";
 
+import type { IncidentAnalysisHistory } from "@/types/incidentAnalysisHistory";
+
 import type { Incident, IncidentStatus } from "@/types/incident";
 
 export default function IncidentCard({
@@ -15,16 +17,20 @@ export default function IncidentCard({
   detection_reason,
   confidence,
   confidence_score,
+  confidence_breakdown,
   evidence_count,
   evidence_events,
   observed_affected_devices,
   potential_affected_devices,
   onStatusChange,
   incidentHistory,
+  analysisHistory,
 }: Incident & {
   onStatusChange: (newStatus: IncidentStatus) => void;
 
   incidentHistory: IncidentStatusHistory[];
+
+  analysisHistory: IncidentAnalysisHistory[];
 }) {
   return (
     <div className="space-y-4 rounded-lg border p-4">
@@ -65,8 +71,8 @@ export default function IncidentCard({
         </p>
       )}
 
-      {/* Explainable incident intelligence */}
-      <div className="space-y-2 rounded-md border p-3">
+      {/* Current NEXUS analysis */}
+      <div className="space-y-3 rounded-md border p-3">
         <h3 className="font-semibold">NEXUS Analysis</h3>
 
         <p className="text-sm">
@@ -87,7 +93,141 @@ export default function IncidentCard({
           Supporting Evidence Events:{" "}
           <span className="font-semibold">{evidence_count}</span>
         </p>
+
+        {confidence_score > 0 && (
+          <div className="space-y-1 rounded-md border p-2">
+            <h4 className="text-sm font-semibold">Score Factors</h4>
+
+            <p className="text-sm text-gray-500">
+              Detection basis:{" "}
+              <span className="font-medium">
+                +{confidence_breakdown.base_score}
+              </span>
+            </p>
+
+            <p className="text-sm text-gray-500">
+              Evidence severity:{" "}
+              <span className="font-medium">
+                +{confidence_breakdown.severity_bonus}
+              </span>
+            </p>
+
+            <p className="text-sm text-gray-500">
+              Evidence diversity:{" "}
+              <span className="font-medium">
+                +{confidence_breakdown.diversity_bonus}
+              </span>
+            </p>
+
+            <p className="text-sm text-gray-500">
+              Topology confirmation:{" "}
+              <span className="font-medium">
+                +{confidence_breakdown.topology_bonus}
+              </span>
+            </p>
+          </div>
+        )}
       </div>
+
+      {/* Analysis evolution */}
+      {analysisHistory.length > 0 && (
+        <div className="space-y-3 rounded-md border p-3">
+          <div>
+            <h3 className="font-semibold">Analysis History</h3>
+
+            <p className="text-xs text-gray-500">
+              How the NEXUS diagnosis changed as new network evidence arrived.
+            </p>
+          </div>
+
+          {analysisHistory.map((assessment, index) => (
+            <div
+              key={assessment.id}
+              className="space-y-2 rounded-md border p-3"
+            >
+              <div className="flex items-center justify-between gap-4">
+                <p className="font-medium">
+                  {assessment.change_type === "INCIDENT_CREATED"
+                    ? "Initial Assessment"
+                    : "Assessment Strengthened"}
+                </p>
+
+                <span className="text-xs text-gray-500">
+                  {new Date(assessment.created_at).toLocaleString()}
+                </span>
+              </div>
+
+              <p className="text-sm">
+                Detection Reason:{" "}
+                <span className="font-semibold">
+                  {assessment.detection_reason}
+                </span>
+              </p>
+
+              <p className="text-sm">
+                Confidence:{" "}
+                <span className="font-semibold">{assessment.confidence}</span>
+              </p>
+
+              <p className="text-sm">
+                Score:{" "}
+                <span className="font-semibold">
+                  {assessment.confidence_score}
+                  /100
+                </span>
+              </p>
+
+              {assessment.root_cause_device && (
+                <p className="text-sm">
+                  Root Cause:{" "}
+                  <span className="font-semibold">
+                    {assessment.root_cause_device}
+                  </span>
+                  {" — "}
+                  {assessment.root_cause_type ?? "Unknown"}
+                </p>
+              )}
+
+              <p className="text-sm">
+                Supporting Evidence:{" "}
+                <span className="font-semibold">
+                  {assessment.evidence_count}
+                </span>
+              </p>
+
+              {assessment.confidence_score > 0 && (
+                <div className="space-y-1 text-xs text-gray-500">
+                  <p>
+                    Detection basis: +
+                    {assessment.confidence_breakdown.base_score}
+                  </p>
+
+                  <p>
+                    Evidence severity: +
+                    {assessment.confidence_breakdown.severity_bonus}
+                  </p>
+
+                  <p>
+                    Evidence diversity: +
+                    {assessment.confidence_breakdown.diversity_bonus}
+                  </p>
+
+                  <p>
+                    Topology confirmation: +
+                    {assessment.confidence_breakdown.topology_bonus}
+                  </p>
+                </div>
+              )}
+
+              {index < analysisHistory.length - 1 && (
+                <p className="pt-1 text-center text-xs text-gray-500">
+                  ↓ New evidence strengthened the diagnosis
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Supporting evidence */}
       {evidence_events.length > 0 && (
@@ -222,7 +362,7 @@ export default function IncidentCard({
         </button>
       )}
 
-      {/* Status history */}
+      {/* Lifecycle history */}
       {incidentHistory.length > 0 && (
         <div className="space-y-2">
           <h3 className="font-semibold">Status History</h3>

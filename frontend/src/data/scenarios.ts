@@ -65,6 +65,30 @@ export const simulationScenarios: SimulationScenario[] = [
   },
 
   {
+    id: "evolving-diagnosis",
+    name: "Evolving Incident Diagnosis",
+    description:
+      "router-01 first produces repeated critical failures, creating a medium-confidence incident. A later downstream failure on router-02 should strengthen the same incident into a high-confidence topology-supported diagnosis.",
+    events: [
+      {
+        device_id: "dev-001",
+        type: "interface_down",
+        severity: "Critical",
+      },
+      {
+        device_id: "dev-001",
+        type: "interface_down",
+        severity: "Critical",
+      },
+      {
+        device_id: "dev-002",
+        type: "device_unreachable",
+        severity: "Major",
+      },
+    ],
+  },
+
+  {
     id: "independent-device-failures",
     name: "Independent Device Failures",
     description:

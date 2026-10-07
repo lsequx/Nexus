@@ -8,16 +8,22 @@ import IncidentCard from "@/components/IncidentCard";
 import EventCard from "@/components/EventCard";
 
 import { getStatusColor } from "@/utils/status";
+
 import { calculateNetworkStatus } from "@/utils/networkStatus";
 
 import type { Event } from "@/types/event";
+
 import type { Incident } from "@/types/incident";
+
 import type { IncidentStatusHistory } from "@/types/incidentHistory";
+
+import type { IncidentAnalysisHistory } from "@/types/incidentAnalysisHistory";
 
 import {
   fetchEvents,
   fetchIncidents,
   fetchIncidentHistory,
+  fetchIncidentAnalysisHistory,
   createIncident,
   updateIncidentStatus,
   createEvent,
@@ -42,12 +48,17 @@ const systems = [
 
 export default function Home() {
   const [events, setEvents] = useState<Event[]>([]);
+
   const [incidents, setIncidents] = useState<Incident[]>([]);
 
   const [incidentSeverity, setIncidentSeverity] = useState("Critical");
 
   const [incidentHistories, setIncidentHistories] = useState<
     Record<string, IncidentStatusHistory[]>
+  >({});
+
+  const [incidentAnalysisHistories, setIncidentAnalysisHistories] = useState<
+    Record<string, IncidentAnalysisHistory[]>
   >({});
 
   const [selectedScenarioId, setSelectedScenarioId] = useState(
@@ -57,6 +68,7 @@ export default function Home() {
   const [isRunningScenario, setIsRunningScenario] = useState(false);
 
   const [loading, setLoading] = useState(true);
+
   const [error, setError] = useState(false);
 
   const networkStatus = calculateNetworkStatus(incidents);
@@ -66,7 +78,10 @@ export default function Home() {
       (scenario) => scenario.id === selectedScenarioId,
     ) ?? simulationScenarios[0];
 
-  // Load the current network state when the page opens.
+  // -------------------------------------------------------
+  // Initial network state
+  // -------------------------------------------------------
+
   useEffect(() => {
     const loadInitialData = async () => {
       try {
@@ -76,7 +91,9 @@ export default function Home() {
         ]);
 
         setEvents(eventData);
+
         setIncidents(incidentData);
+
         setError(false);
       } catch (err) {
         console.error("Failed to load initial data:", err);
@@ -90,8 +107,10 @@ export default function Home() {
     loadInitialData();
   }, []);
 
-  // Load status history for incidents that have not
-  // had their history loaded yet.
+  // -------------------------------------------------------
+  // Incident lifecycle history
+  // -------------------------------------------------------
+
   useEffect(() => {
     const loadIncidentHistories = async () => {
       const incidentsWithoutHistory = incidents.filter(
@@ -123,8 +142,48 @@ export default function Home() {
     loadIncidentHistories();
   }, [incidents, incidentHistories]);
 
-  // Reload events and incidents after NEXUS performs
-  // correlation or incident detection.
+  // -------------------------------------------------------
+  // Incident analysis history
+  //
+  // This records how NEXUS's diagnosis evolved as new
+  // network evidence became available.
+  // -------------------------------------------------------
+
+  useEffect(() => {
+    const loadAnalysisHistories = async () => {
+      const incidentsWithoutAnalysisHistory = incidents.filter(
+        (incident) => !(incident.id in incidentAnalysisHistories),
+      );
+
+      if (incidentsWithoutAnalysisHistory.length === 0) {
+        return;
+      }
+
+      try {
+        const historyResults = await Promise.all(
+          incidentsWithoutAnalysisHistory.map(async (incident) => {
+            const history = await fetchIncidentAnalysisHistory(incident.id);
+
+            return [incident.id, history] as const;
+          }),
+        );
+
+        setIncidentAnalysisHistories((current) => ({
+          ...current,
+          ...Object.fromEntries(historyResults),
+        }));
+      } catch (err) {
+        console.error("Failed to load incident analysis history:", err);
+      }
+    };
+
+    loadAnalysisHistories();
+  }, [incidents, incidentAnalysisHistories]);
+
+  // -------------------------------------------------------
+  // Refresh authoritative network state
+  // -------------------------------------------------------
+
   const refreshNetworkData = async () => {
     const [eventData, incidentData] = await Promise.all([
       fetchEvents(),
@@ -132,14 +191,16 @@ export default function Home() {
     ]);
 
     setEvents(eventData);
+
     setIncidents(incidentData);
+
+    return incidentData;
   };
 
-  // Manually create an incident.
-  //
-  // This remains useful as a manual incident-management
-  // demonstration. Because it is created manually rather than
-  // from network evidence, its root cause may be undetermined.
+  // -------------------------------------------------------
+  // Manual incident
+  // -------------------------------------------------------
+
   const handleCreateIncident = async () => {
     try {
       const newIncident = await createIncident(
@@ -148,12 +209,37 @@ export default function Home() {
       );
 
       setIncidents((currentIncidents) => [newIncident, ...currentIncidents]);
+
+      // The new incident may have history generated
+      // by the backend. Force history retrieval.
+      setIncidentHistories((current) => {
+        const next = {
+          ...current,
+        };
+
+        delete next[newIncident.id];
+
+        return next;
+      });
+
+      setIncidentAnalysisHistories((current) => {
+        const next = {
+          ...current,
+        };
+
+        delete next[newIncident.id];
+
+        return next;
+      });
     } catch (err) {
       console.error("Failed to create incident:", err);
     }
   };
 
-  // Move an incident through its lifecycle.
+  // -------------------------------------------------------
+  // Incident lifecycle
+  // -------------------------------------------------------
+
   const handleStatusChange = async (
     incident: Incident,
     newStatus: Incident["status"],
@@ -183,11 +269,14 @@ export default function Home() {
     }
   };
 
-  // Run a deterministic NEXUS scenario.
+  // -------------------------------------------------------
+  // Deterministic NEXUS scenario
   //
-  // Events are deliberately sent one at a time because
-  // POST /events triggers the backend correlation and
-  // incident-analysis pipeline after each new event.
+  // Events are sent sequentially because POST /events
+  // triggers correlation and incident analysis after every
+  // new network signal.
+  // -------------------------------------------------------
+
   const handleRunScenario = async () => {
     if (isRunningScenario) {
       return;
@@ -200,10 +289,13 @@ export default function Home() {
         await createEvent(event);
       }
 
-      // A scenario can create a new incident or strengthen
-      // the root-cause assessment of an existing incident.
-      // Reload the authoritative state from the backend.
       await refreshNetworkData();
+
+      // A scenario may strengthen the diagnosis of an
+      // incident that already existed. Clear the cached
+      // analysis histories so they are fetched again
+      // from the backend with the newest assessment.
+      setIncidentAnalysisHistories({});
     } catch (err) {
       console.error("Failed to run simulation scenario:", err);
     } finally {
@@ -256,14 +348,14 @@ export default function Home() {
 
       <WelcomeCard />
 
-      {/* NEXUS intelligence scenario simulator */}
+      {/* Scenario simulator */}
       <section className="space-y-4 rounded-lg border p-4">
         <div>
           <h2 className="text-xl font-semibold">NEXUS Scenario Simulator</h2>
 
           <p className="text-sm text-gray-400">
             Generate controlled network events to test correlation, incident
-            detection, and root-cause analysis.
+            detection, root-cause analysis, and evolving incident intelligence.
           </p>
         </div>
 
@@ -315,6 +407,7 @@ export default function Home() {
               key={incident.id}
               {...incident}
               incidentHistory={incidentHistories[incident.id] ?? []}
+              analysisHistory={incidentAnalysisHistories[incident.id] ?? []}
               onStatusChange={(newStatus) =>
                 handleStatusChange(incident, newStatus)
               }

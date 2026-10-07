@@ -15,6 +15,7 @@ from database import (
     get_incident_by_id,
     get_incident_status_history,
     get_active_incident_by_device,
+    get_incident_analysis_history,
     get_device_dependencies,
     get_devices,
     update_incident_assessment,
@@ -31,7 +32,7 @@ from utils.incident_detection import detect_incident
 from utils.topology import find_affected_devices
 
 from utils.confidence import (
-    calculate_confidence_score,
+    calculate_confidence_breakdown,
     get_confidence_label,
 )
 
@@ -183,26 +184,14 @@ def enrich_incident(
     # Detection explanation
     # -----------------------------------------------------
 
-    if (
-        root_cause_reason
-        == "topology_supported"
-    ):
-        detection_reason = (
-            "Topology Supported"
-        )
+    if root_cause_reason == "topology_supported":
+        detection_reason = "Topology Supported"
 
-    elif (
-        root_cause_reason
-        == "priority_fallback"
-    ):
-        detection_reason = (
-            "Repeated Device Evidence"
-        )
+    elif root_cause_reason == "priority_fallback":
+        detection_reason = "Repeated Device Evidence"
 
     else:
-        detection_reason = (
-            "Manual / Undetermined"
-        )
+        detection_reason = "Manual / Undetermined"
 
     # -----------------------------------------------------
     # Supporting evidence
@@ -226,12 +215,8 @@ def enrich_incident(
 
         evidence_events.append(
             {
-                "id": (
-                    evidence_event["id"]
-                ),
-                "device_id": (
-                    evidence_device_id
-                ),
+                "id": evidence_event["id"],
+                "device_id": evidence_device_id,
                 "device_name": (
                     device_names.get(
                         evidence_device_id
@@ -241,32 +226,131 @@ def enrich_incident(
                     )
                 ),
                 "type": (
-                    evidence_event[
-                        "type"
-                    ]
+                    evidence_event["type"]
                 ),
                 "severity": (
-                    evidence_event[
-                        "severity"
-                    ]
+                    evidence_event["severity"]
                 ),
                 "timestamp": (
-                    evidence_event[
-                        "timestamp"
-                    ]
+                    evidence_event["timestamp"]
                 ),
             }
         )
 
     # -----------------------------------------------------
-    # Numeric confidence scoring
+    # Impact analysis
     # -----------------------------------------------------
 
-    confidence_score = (
-        calculate_confidence_score(
-            root_cause_reason,
-            len(evidence_events),
+    observed_affected_devices = []
+    potential_affected_devices = []
+
+    if root_device_id is not None:
+        potential_devices = (
+            find_affected_devices(
+                root_device_id,
+                dependencies,
+            )
         )
+
+        potential_affected_devices = [
+            {
+                "device_id": affected_id,
+                "device_name": (
+                    device_names.get(
+                        affected_id
+                    )
+                ),
+                "impact_level": (
+                    "Direct"
+                    if depth == 1
+                    else "Indirect"
+                ),
+                "depth": depth,
+            }
+            for (
+                affected_id,
+                depth,
+            ) in potential_devices.items()
+        ]
+
+        # -------------------------------------------------
+        # Observed impact
+        #
+        # Evidence from downstream devices counts as
+        # observed impact.
+        #
+        # Repeated evidence from the root-cause device
+        # supports diagnosis but does not mean that the
+        # device is downstream impact.
+        # -------------------------------------------------
+
+        observed_device_ids = []
+
+        for evidence_event in evidence_events:
+            evidence_device_id = (
+                evidence_event[
+                    "device_id"
+                ]
+            )
+
+            if evidence_device_id is None:
+                continue
+
+            if (
+                evidence_device_id
+                == root_device_id
+            ):
+                continue
+
+            if (
+                evidence_device_id
+                not in observed_device_ids
+            ):
+                observed_device_ids.append(
+                    evidence_device_id
+                )
+
+        for device_id in observed_device_ids:
+            depth = potential_devices.get(
+                device_id
+            )
+
+            if depth is None:
+                continue
+
+            observed_affected_devices.append(
+                {
+                    "device_id": device_id,
+                    "device_name": (
+                        device_names.get(
+                            device_id
+                        )
+                    ),
+                    "impact_level": (
+                        "Direct"
+                        if depth == 1
+                        else "Indirect"
+                    ),
+                    "depth": depth,
+                }
+            )
+
+    # -----------------------------------------------------
+    # Weighted confidence scoring
+    # -----------------------------------------------------
+
+    confidence_breakdown = (
+        calculate_confidence_breakdown(
+            root_cause_reason,
+            evidence_events,
+            observed_affected_devices,
+        )
+    )
+
+    confidence_score = (
+        confidence_breakdown[
+            "final_score"
+        ]
     )
 
     confidence = (
@@ -274,6 +358,10 @@ def enrich_incident(
             confidence_score
         )
     )
+
+    # -----------------------------------------------------
+    # API enrichment
+    # -----------------------------------------------------
 
     incident[
         "detection_reason"
@@ -288,122 +376,37 @@ def enrich_incident(
     ] = confidence_score
 
     incident[
+        "confidence_breakdown"
+    ] = {
+        "base_score": (
+            confidence_breakdown[
+                "base_score"
+            ]
+        ),
+        "severity_bonus": (
+            confidence_breakdown[
+                "severity_bonus"
+            ]
+        ),
+        "diversity_bonus": (
+            confidence_breakdown[
+                "diversity_bonus"
+            ]
+        ),
+        "topology_bonus": (
+            confidence_breakdown[
+                "topology_bonus"
+            ]
+        ),
+    }
+
+    incident[
         "evidence_count"
     ] = len(evidence_events)
 
     incident[
         "evidence_events"
     ] = evidence_events
-
-    # -----------------------------------------------------
-    # Manual incidents may not have a root-cause device.
-    # -----------------------------------------------------
-
-    if root_device_id is None:
-        incident[
-            "observed_affected_devices"
-        ] = []
-
-        incident[
-            "potential_affected_devices"
-        ] = []
-
-        return incident
-
-    # -----------------------------------------------------
-    # Potential topology impact
-    # -----------------------------------------------------
-
-    potential_devices = (
-        find_affected_devices(
-            root_device_id,
-            dependencies,
-        )
-    )
-
-    potential_affected_devices = [
-        {
-            "device_id": affected_id,
-            "device_name": (
-                device_names.get(
-                    affected_id
-                )
-            ),
-            "impact_level": (
-                "Direct"
-                if depth == 1
-                else "Indirect"
-            ),
-            "depth": depth,
-        }
-        for (
-            affected_id,
-            depth,
-        ) in potential_devices.items()
-    ]
-
-    # -----------------------------------------------------
-    # Observed affected devices
-    #
-    # Evidence coming from a downstream device represents
-    # observed impact.
-    #
-    # Evidence from the root-cause device itself still
-    # supports the diagnosis but is not an affected device.
-    # -----------------------------------------------------
-
-    observed_device_ids = []
-
-    for evidence_event in evidence_events:
-        evidence_device_id = (
-            evidence_event[
-                "device_id"
-            ]
-        )
-
-        if evidence_device_id is None:
-            continue
-
-        if (
-            evidence_device_id
-            == root_device_id
-        ):
-            continue
-
-        if (
-            evidence_device_id
-            not in observed_device_ids
-        ):
-            observed_device_ids.append(
-                evidence_device_id
-            )
-
-    observed_affected_devices = []
-
-    for device_id in observed_device_ids:
-        depth = potential_devices.get(
-            device_id
-        )
-
-        if depth is None:
-            continue
-
-        observed_affected_devices.append(
-            {
-                "device_id": device_id,
-                "device_name": (
-                    device_names.get(
-                        device_id
-                    )
-                ),
-                "impact_level": (
-                    "Direct"
-                    if depth == 1
-                    else "Indirect"
-                ),
-                "depth": depth,
-            }
-        )
 
     incident[
         "observed_affected_devices"
@@ -415,6 +418,319 @@ def enrich_incident(
 
     return incident
 
+def enrich_analysis_history(
+    history_entries,
+    dependencies=None,
+    all_devices=None,
+    all_events=None,
+):
+    if dependencies is None:
+        dependencies = (
+            get_device_dependencies()
+        )
+
+    if all_devices is None:
+        all_devices = get_devices()
+
+    if all_events is None:
+        all_events = get_events()
+
+    device_names = {
+        device["id"]: device["name"]
+        for device in all_devices
+    }
+
+    event_by_id = {
+        event["id"]: event
+        for event in all_events
+    }
+
+    enriched_history = []
+
+    for entry in history_entries:
+        root_cause_event_id = (
+            entry.get(
+                "root_cause_event_id"
+            )
+        )
+
+        root_cause_reason = (
+            entry.get(
+                "root_cause_reason"
+            )
+        )
+
+        root_cause_event = (
+            event_by_id.get(
+                root_cause_event_id
+            )
+            if root_cause_event_id
+            else None
+        )
+
+        root_device_id = (
+            root_cause_event.get(
+                "device_id"
+            )
+            if root_cause_event
+            else None
+        )
+
+        if (
+            root_cause_reason
+            == "topology_supported"
+        ):
+            detection_reason = (
+                "Topology Supported"
+            )
+
+        elif (
+            root_cause_reason
+            == "priority_fallback"
+        ):
+            detection_reason = (
+                "Repeated Device Evidence"
+            )
+
+        else:
+            detection_reason = (
+                "Manual / Undetermined"
+            )
+
+        # -------------------------------------------------
+        # Historical supporting evidence
+        # -------------------------------------------------
+
+        evidence_event_ids = (
+            entry.get(
+                "root_cause_evidence"
+            )
+            or []
+        )
+
+        evidence_events = []
+
+        for event_id in evidence_event_ids:
+            event = event_by_id.get(
+                event_id
+            )
+
+            if event is None:
+                continue
+
+            evidence_device_id = (
+                event.get(
+                    "device_id"
+                )
+            )
+
+            evidence_events.append(
+                {
+                    "id": event["id"],
+                    "device_id": (
+                        evidence_device_id
+                    ),
+                    "device_name": (
+                        device_names.get(
+                            evidence_device_id
+                        )
+                        or event.get(
+                            "device"
+                        )
+                    ),
+                    "type": event["type"],
+                    "severity": (
+                        event["severity"]
+                    ),
+                    "timestamp": (
+                        event["timestamp"]
+                    ),
+                }
+            )
+
+        # -------------------------------------------------
+        # Reconstruct observed impact for this assessment
+        # -------------------------------------------------
+
+        observed_affected_devices = []
+
+        if root_device_id is not None:
+            potential_devices = (
+                find_affected_devices(
+                    root_device_id,
+                    dependencies,
+                )
+            )
+
+            observed_device_ids = []
+
+            for evidence_event in evidence_events:
+                evidence_device_id = (
+                    evidence_event[
+                        "device_id"
+                    ]
+                )
+
+                if evidence_device_id is None:
+                    continue
+
+                if (
+                    evidence_device_id
+                    == root_device_id
+                ):
+                    continue
+
+                if (
+                    evidence_device_id
+                    not in observed_device_ids
+                ):
+                    observed_device_ids.append(
+                        evidence_device_id
+                    )
+
+            for device_id in observed_device_ids:
+                depth = potential_devices.get(
+                    device_id
+                )
+
+                if depth is None:
+                    continue
+
+                observed_affected_devices.append(
+                    {
+                        "device_id": (
+                            device_id
+                        ),
+                        "device_name": (
+                            device_names.get(
+                                device_id
+                            )
+                        ),
+                        "impact_level": (
+                            "Direct"
+                            if depth == 1
+                            else "Indirect"
+                        ),
+                        "depth": depth,
+                    }
+                )
+
+        # -------------------------------------------------
+        # Historical confidence score
+        # -------------------------------------------------
+
+        confidence_breakdown = (
+            calculate_confidence_breakdown(
+                root_cause_reason,
+                evidence_events,
+                observed_affected_devices,
+            )
+        )
+
+        confidence_score = (
+            confidence_breakdown[
+                "final_score"
+            ]
+        )
+
+        confidence = (
+            get_confidence_label(
+                confidence_score
+            )
+        )
+
+        enriched_history.append(
+            {
+                "id": entry["id"],
+                "incident_id": (
+                    entry[
+                        "incident_id"
+                    ]
+                ),
+                "change_type": (
+                    entry[
+                        "change_type"
+                    ]
+                ),
+                "created_at": (
+                    entry[
+                        "created_at"
+                    ]
+                ),
+                "severity": (
+                    entry["severity"]
+                ),
+                "root_cause_event_id": (
+                    root_cause_event_id
+                ),
+                "root_cause_device_id": (
+                    root_device_id
+                ),
+                "root_cause_device": (
+                    device_names.get(
+                        root_device_id
+                    )
+                    if root_device_id
+                    else None
+                ),
+                "root_cause_type": (
+                    root_cause_event.get(
+                        "type"
+                    )
+                    if root_cause_event
+                    else None
+                ),
+                "root_cause_severity": (
+                    root_cause_event.get(
+                        "severity"
+                    )
+                    if root_cause_event
+                    else None
+                ),
+                "detection_reason": (
+                    detection_reason
+                ),
+                "confidence": confidence,
+                "confidence_score": (
+                    confidence_score
+                ),
+                "confidence_breakdown": {
+                    "base_score": (
+                        confidence_breakdown[
+                            "base_score"
+                        ]
+                    ),
+                    "severity_bonus": (
+                        confidence_breakdown[
+                            "severity_bonus"
+                        ]
+                    ),
+                    "diversity_bonus": (
+                        confidence_breakdown[
+                            "diversity_bonus"
+                        ]
+                    ),
+                    "topology_bonus": (
+                        confidence_breakdown[
+                            "topology_bonus"
+                        ]
+                    ),
+                },
+                "evidence_count": (
+                    len(
+                        evidence_events
+                    )
+                ),
+                "evidence_events": (
+                    evidence_events
+                ),
+                "observed_affected_devices": (
+                    observed_affected_devices
+                ),
+            }
+        )
+
+    return enriched_history
 
 # ---------------------------------------------------------
 # Health
@@ -887,6 +1203,41 @@ def get_incident_history_endpoint(
         )
     )
 
+@app.get(
+    "/incidents/{incident_id}/analysis-history"
+)
+def get_incident_analysis_history_endpoint(
+    incident_id: str,
+):
+    incident = get_incident_by_id(
+        incident_id
+    )
+
+    if incident is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found",
+        )
+
+    history = (
+        get_incident_analysis_history(
+            incident_id
+        )
+    )
+
+    dependencies = (
+        get_device_dependencies()
+    )
+
+    all_devices = get_devices()
+    all_events = get_events()
+
+    return enrich_analysis_history(
+        history,
+        dependencies,
+        all_devices,
+        all_events,
+    )
 
 # ---------------------------------------------------------
 # Topology

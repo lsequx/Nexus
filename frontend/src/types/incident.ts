@@ -18,6 +18,13 @@ export type IncidentEvidenceEvent = {
   timestamp: string;
 };
 
+export type ConfidenceBreakdown = {
+  base_score: number;
+  severity_bonus: number;
+  diversity_bonus: number;
+  topology_bonus: number;
+};
+
 export type Incident = {
   id: string;
   title: string;
@@ -34,6 +41,7 @@ export type Incident = {
 
   confidence: IncidentConfidence;
   confidence_score: number;
+  confidence_breakdown: ConfidenceBreakdown;
 
   evidence_count: number;
   evidence_events: IncidentEvidenceEvent[];
