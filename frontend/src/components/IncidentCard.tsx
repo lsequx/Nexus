@@ -1,10 +1,10 @@
+import CollapsibleSection from "@/components/CollapsibleSection";
+import StatusIndicator from "@/components/StatusIndicator";
 import { getIncidentStatusColor, getSeverityColor } from "@/utils/status";
-
 import type { IncidentStatusHistory } from "@/types/incidentHistory";
-
 import type { IncidentAnalysisHistory } from "@/types/incidentAnalysisHistory";
-
 import type { Incident, IncidentStatus } from "@/types/incident";
+import IncidentNotesPanel from "@/components/IncidentNotesPanel";
 
 export default function IncidentCard({
   id,
@@ -27,357 +27,214 @@ export default function IncidentCard({
   analysisHistory,
 }: Incident & {
   onStatusChange: (newStatus: IncidentStatus) => void;
-
   incidentHistory: IncidentStatusHistory[];
-
   analysisHistory: IncidentAnalysisHistory[];
 }) {
+  const confidenceStatus =
+    confidence === "High" ? "Operational" : confidence === "Medium" ? "Degraded" : "Critical";
+
   return (
-    <div className="space-y-4 rounded-lg border p-4">
-      <h2 className="text-xl font-semibold">{title}</h2>
-
-      <p>
-        Severity:{" "}
-        <span className={`font-semibold ${getSeverityColor(severity)}`}>
-          {severity}
-        </span>
-      </p>
-
-      {/* Root-cause analysis */}
-      {root_cause_device ? (
-        <>
-          <p>
-            Root Cause Device:{" "}
-            <span className="font-semibold">{root_cause_device}</span>
-          </p>
-
-          <p>
-            Root Cause Type:{" "}
-            <span className="font-semibold">
-              {root_cause_type ?? "Unknown"}
+    <article className="space-y-3 rounded-2xl border border-slate-800 bg-slate-950/30 p-4">
+      <header className="grid gap-4 rounded-2xl border border-slate-800 bg-slate-900/65 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`rounded-lg bg-slate-950 px-2.5 py-1 text-xs font-bold ${getSeverityColor(severity)}`}>
+              {severity}
             </span>
-          </p>
-
-          <p>
-            Root Cause Severity:{" "}
-            <span className="font-semibold">
-              {root_cause_severity ?? "Unknown"}
+            <span className={`rounded-lg bg-slate-950 px-2.5 py-1 text-xs font-bold ${getIncidentStatusColor(status)}`}>
+              {status}
             </span>
-          </p>
-        </>
-      ) : (
-        <p>
-          Root Cause: <span className="font-semibold">Not determined</span>
-        </p>
-      )}
-
-      {/* Current NEXUS analysis */}
-      <div className="space-y-3 rounded-md border p-3">
-        <h3 className="font-semibold">NEXUS Analysis</h3>
-
-        <p className="text-sm">
-          Detection Reason:{" "}
-          <span className="font-semibold">{detection_reason}</span>
-        </p>
-
-        <p className="text-sm">
-          Confidence: <span className="font-semibold">{confidence}</span>
-        </p>
-
-        <p className="text-sm">
-          Confidence Score:{" "}
-          <span className="font-semibold">{confidence_score}/100</span>
-        </p>
-
-        <p className="text-sm">
-          Supporting Evidence Events:{" "}
-          <span className="font-semibold">{evidence_count}</span>
-        </p>
-
-        {confidence_score > 0 && (
-          <div className="space-y-1 rounded-md border p-2">
-            <h4 className="text-sm font-semibold">Score Factors</h4>
-
-            <p className="text-sm text-gray-500">
-              Detection basis:{" "}
-              <span className="font-medium">
-                +{confidence_breakdown.base_score}
-              </span>
-            </p>
-
-            <p className="text-sm text-gray-500">
-              Evidence severity:{" "}
-              <span className="font-medium">
-                +{confidence_breakdown.severity_bonus}
-              </span>
-            </p>
-
-            <p className="text-sm text-gray-500">
-              Evidence diversity:{" "}
-              <span className="font-medium">
-                +{confidence_breakdown.diversity_bonus}
-              </span>
-            </p>
-
-            <p className="text-sm text-gray-500">
-              Topology confirmation:{" "}
-              <span className="font-medium">
-                +{confidence_breakdown.topology_bonus}
-              </span>
-            </p>
           </div>
-        )}
-      </div>
+          <h1 className="mt-3 text-2xl font-bold tracking-tight text-white">{title}</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {root_cause_device ?? "Root cause undetermined"}
+            {root_cause_type ? ` · ${root_cause_type}` : ""}
+          </p>
+        </div>
 
-      {/* Analysis evolution */}
-      {analysisHistory.length > 0 && (
-        <div className="space-y-3 rounded-md border p-3">
+        <div className="flex items-center gap-5 rounded-xl border border-slate-800 bg-slate-950/60 px-5 py-4">
           <div>
-            <h3 className="font-semibold">Analysis History</h3>
-
-            <p className="text-xs text-gray-500">
-              How the NEXUS diagnosis changed as new network evidence arrived.
-            </p>
+            <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500">Confidence</p>
+            <p className="mt-1 text-3xl font-black text-white">{confidence_score}</p>
+            <p className="text-[10px] text-slate-600">out of 100</p>
           </div>
+          <StatusIndicator status={confidenceStatus} label={confidence} />
+        </div>
+      </header>
 
-          {analysisHistory.map((assessment, index) => (
-            <div
-              key={assessment.id}
-              className="space-y-2 rounded-md border p-3"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <p className="font-medium">
-                  {assessment.change_type === "INCIDENT_CREATED"
-                    ? "Initial Assessment"
-                    : "Assessment Strengthened"}
-                </p>
+      <CollapsibleSection
+        title="NEXUS Analysis"
+        subtitle="Current root-cause assessment and confidence factors"
+        defaultOpen
+      >
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+            <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500">Detection reason</p>
+            <p className="mt-2 font-semibold text-white">{detection_reason}</p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+            <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500">Root cause</p>
+            <p className="mt-2 font-semibold text-white">{root_cause_device ?? "Unknown"}</p>
+            <p className="mt-1 text-xs text-slate-500">{root_cause_type ?? "Unknown type"} · {root_cause_severity ?? "Unknown severity"}</p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+            <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500">Supporting evidence</p>
+            <p className="mt-2 text-2xl font-bold text-white">{evidence_count}</p>
+          </div>
+        </div>
 
-                <span className="text-xs text-gray-500">
-                  {new Date(assessment.created_at).toLocaleString()}
-                </span>
-              </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+          {[
+            ["Detection basis", confidence_breakdown.base_score],
+            ["Evidence severity", confidence_breakdown.severity_bonus],
+            ["Evidence diversity", confidence_breakdown.diversity_bonus],
+            ["Topology confirmation", confidence_breakdown.topology_bonus],
+          ].map(([label, value]) => (
+            <div key={String(label)} className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+              <p className="text-[10px] text-slate-500">{label}</p>
+              <p className="mt-1 text-sm font-bold text-slate-200">+{value}</p>
+            </div>
+          ))}
+        </div>
+      </CollapsibleSection>
 
-              <p className="text-sm">
-                Detection Reason:{" "}
-                <span className="font-semibold">
-                  {assessment.detection_reason}
-                </span>
-              </p>
-
-              <p className="text-sm">
-                Confidence:{" "}
-                <span className="font-semibold">{assessment.confidence}</span>
-              </p>
-
-              <p className="text-sm">
-                Score:{" "}
-                <span className="font-semibold">
-                  {assessment.confidence_score}
-                  /100
-                </span>
-              </p>
-
-              {assessment.root_cause_device && (
-                <p className="text-sm">
-                  Root Cause:{" "}
-                  <span className="font-semibold">
-                    {assessment.root_cause_device}
-                  </span>
-                  {" — "}
-                  {assessment.root_cause_type ?? "Unknown"}
-                </p>
-              )}
-
-              <p className="text-sm">
-                Supporting Evidence:{" "}
-                <span className="font-semibold">
-                  {assessment.evidence_count}
-                </span>
-              </p>
-
-              {assessment.confidence_score > 0 && (
-                <div className="space-y-1 text-xs text-gray-500">
-                  <p>
-                    Detection basis: +
-                    {assessment.confidence_breakdown.base_score}
-                  </p>
-
-                  <p>
-                    Evidence severity: +
-                    {assessment.confidence_breakdown.severity_bonus}
-                  </p>
-
-                  <p>
-                    Evidence diversity: +
-                    {assessment.confidence_breakdown.diversity_bonus}
-                  </p>
-
-                  <p>
-                    Topology confirmation: +
-                    {assessment.confidence_breakdown.topology_bonus}
-                  </p>
+      <CollapsibleSection
+        title="Analysis History"
+        subtitle="How the diagnosis evolved as evidence arrived"
+        count={analysisHistory.length}
+      >
+        <div className="space-y-3">
+          {analysisHistory.length === 0 ? (
+            <p className="text-sm text-slate-500">No analysis changes recorded.</p>
+          ) : (
+            analysisHistory.map((assessment, index) => (
+              <div key={assessment.id} className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:grid-cols-[130px_1fr_auto] md:items-center">
+                <div>
+                  <p className="text-xs font-bold text-white">{assessment.confidence_score}/100</p>
+                  <p className="text-[10px] text-slate-500">{assessment.confidence}</p>
                 </div>
-              )}
-
-              {index < analysisHistory.length - 1 && (
-                <p className="pt-1 text-center text-xs text-gray-500">
-                  ↓ New evidence strengthened the diagnosis
+                <div>
+                  <p className="text-sm font-semibold text-slate-200">
+                    {assessment.change_type === "INCIDENT_CREATED" ? "Initial Assessment" : "Assessment Strengthened"}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">{assessment.detection_reason} · {assessment.root_cause_device ?? "Unknown root"}</p>
+                </div>
+                <p className="text-[10px] text-slate-600">
+                  {new Date(assessment.created_at).toLocaleString()}
+                  {index < analysisHistory.length - 1 ? " →" : ""}
                 </p>
-              )}
-            </div>
-          ))}
+              </div>
+            ))
+          )}
         </div>
-      )}
+      </CollapsibleSection>
 
-      {/* Supporting evidence */}
-      {evidence_events.length > 0 && (
+      <CollapsibleSection
+        title="Supporting Evidence"
+        subtitle="Signals that contributed to the current assessment"
+        count={evidence_events.length}
+      >
         <div className="space-y-2">
-          <div>
-            <h3 className="font-semibold">Supporting Evidence</h3>
+          {evidence_events.length === 0 ? (
+            <p className="text-sm text-slate-500">No supporting evidence attached.</p>
+          ) : (
+            evidence_events.map((event) => (
+              <div key={event.id} className="grid gap-2 rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3 text-sm md:grid-cols-[1.2fr_1fr_auto_auto] md:items-center">
+                <span className="font-semibold text-slate-200">{event.device_name ?? event.device_id ?? "Unknown device"}</span>
+                <span className="text-slate-500">{event.type}</span>
+                <span className={`font-semibold ${getSeverityColor(event.severity)}`}>{event.severity}</span>
+                <span className="text-xs text-slate-600">{new Date(event.timestamp).toLocaleString()}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </CollapsibleSection>
 
-            <p className="text-xs text-gray-500">
-              Network signals that contributed to the NEXUS incident decision.
-            </p>
+      <CollapsibleSection
+        title="Impact"
+        subtitle="Observed evidence and potential downstream dependency scope"
+        count={observed_affected_devices.length + potential_affected_devices.length}
+      >
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Observed affected</p>
+            <div className="space-y-2">
+              {observed_affected_devices.length === 0 ? (
+                <p className="text-sm text-slate-600">No downstream impact observed.</p>
+              ) : observed_affected_devices.map((device) => (
+                <div key={device.device_id} className="rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3 text-sm">
+                  <p className="font-semibold text-slate-200">{device.device_name ?? device.device_id}</p>
+                  <p className="mt-1 text-xs text-slate-500">{device.impact_level} · depth {device.depth}</p>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {evidence_events.map((event) => (
-            <div key={event.id} className="rounded-md border p-2 text-sm">
-              <p className="font-medium">
-                {event.device_name ?? event.device_id ?? "Unknown device"}
-              </p>
-
-              <p className="text-gray-500">Event: {event.type}</p>
-
-              <p className="text-gray-500">Severity: {event.severity}</p>
-
-              <p className="text-gray-500">
-                Time: {new Date(event.timestamp).toLocaleString()}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Observed impact */}
-      {observed_affected_devices.length > 0 && (
-        <div className="space-y-2">
           <div>
-            <h3 className="font-semibold">Observed Affected Devices</h3>
-
-            <p className="text-xs text-gray-500">
-              Devices that produced downstream network evidence supporting this
-              incident.
-            </p>
-          </div>
-
-          {observed_affected_devices.map((device) => (
-            <div
-              key={device.device_id}
-              className="rounded-md border p-2 text-sm"
-            >
-              <p className="font-medium">
-                {device.device_name ?? device.device_id}
-              </p>
-
-              <p className="text-gray-500">Impact: {device.impact_level}</p>
-
-              <p className="text-gray-500">Dependency depth: {device.depth}</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Potential scope</p>
+            <div className="space-y-2">
+              {potential_affected_devices.length === 0 ? (
+                <p className="text-sm text-slate-600">No downstream dependencies identified.</p>
+              ) : potential_affected_devices.map((device) => (
+                <div key={device.device_id} className="rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3 text-sm">
+                  <p className="font-semibold text-slate-200">{device.device_name ?? device.device_id}</p>
+                  <p className="mt-1 text-xs text-slate-500">{device.impact_level} · depth {device.depth}</p>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
-      )}
+      </CollapsibleSection>
 
-      {/* Potential topology impact */}
-      {potential_affected_devices.length > 0 && (
+      <CollapsibleSection
+        title="Operator Notes"
+        subtitle={status === "Investigating" ? "Capture investigation context and link notes to evidence" : "Saved investigation knowledge for future incidents"}
+        defaultOpen={status === "Investigating"}
+      >
+        <IncidentNotesPanel
+          incidentId={id}
+          evidenceEvents={evidence_events}
+          canAdd={status === "Investigating"}
+        />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Lifecycle History"
+        subtitle="Operator status transitions"
+        count={incidentHistory.length}
+      >
         <div className="space-y-2">
-          <div>
-            <h3 className="font-semibold">Potential Impact Scope</h3>
-
-            <p className="text-xs text-gray-500">
-              Downstream devices that could be affected based on network
-              topology.
-            </p>
-          </div>
-
-          {potential_affected_devices.map((device) => (
-            <div
-              key={device.device_id}
-              className="rounded-md border p-2 text-sm"
-            >
-              <p className="font-medium">
-                {device.device_name ?? device.device_id}
-              </p>
-
-              <p className="text-gray-500">
-                Relationship: {device.impact_level}
-              </p>
-
-              <p className="text-gray-500">Dependency depth: {device.depth}</p>
+          {incidentHistory.length === 0 ? (
+            <p className="text-sm text-slate-500">No lifecycle transitions recorded.</p>
+          ) : incidentHistory.map((history) => (
+            <div key={history.id} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3 text-sm">
+              <span className="text-slate-300">{history.old_status ?? "Created"} → {history.new_status}</span>
+              <span className="text-xs text-slate-600">{new Date(history.changed_at).toLocaleString()}</span>
             </div>
           ))}
         </div>
-      )}
+      </CollapsibleSection>
 
-      {/* Incident lifecycle */}
-      <p>
-        Status:{" "}
-        <span className={`font-semibold ${getIncidentStatusColor(status)}`}>
-          {status}
-        </span>
-      </p>
-
-      {status === "Open" && (
-        <button
-          onClick={() => onStatusChange("Investigating")}
-          className="rounded-lg border px-4 py-2"
-        >
-          Investigate
-        </button>
-      )}
-
-      {status === "Investigating" && (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/55 px-4 py-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Current status</p>
+          <p className={`mt-1 text-sm font-bold ${getIncidentStatusColor(status)}`}>{status}</p>
+        </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => onStatusChange("Resolved")}
-            className="rounded-lg border px-4 py-2"
-          >
-            Resolve
-          </button>
-
-          <button
-            onClick={() => onStatusChange("Closed")}
-            className="rounded-lg border px-4 py-2"
-          >
-            Close
-          </button>
+          {status === "Open" && (
+            <button onClick={() => onStatusChange("Investigating")} className="rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-slate-950">Investigate</button>
+          )}
+          {status === "Investigating" && (
+            <>
+              <button onClick={() => onStatusChange("Resolved")} className="rounded-lg bg-sky-400 px-4 py-2 text-xs font-bold text-slate-950">Resolve</button>
+              <button onClick={() => onStatusChange("Closed")} className="rounded-lg border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-200">Close</button>
+            </>
+          )}
+          {status === "Resolved" && (
+            <button onClick={() => onStatusChange("Closed")} className="rounded-lg bg-emerald-400 px-4 py-2 text-xs font-bold text-slate-950">Close</button>
+          )}
         </div>
-      )}
-
-      {status === "Resolved" && (
-        <button
-          onClick={() => onStatusChange("Closed")}
-          className="rounded-lg border px-4 py-2"
-        >
-          Close
-        </button>
-      )}
-
-      {/* Lifecycle history */}
-      {incidentHistory.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="font-semibold">Status History</h3>
-
-          {incidentHistory.map((history) => (
-            <div key={history.id} className="text-sm text-gray-400">
-              <p>
-                {history.old_status ?? "Created"} → {history.new_status}
-              </p>
-
-              <p>{new Date(history.changed_at).toLocaleString()}</p>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+      </div>
+    </article>
   );
 }

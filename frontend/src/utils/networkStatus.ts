@@ -1,5 +1,7 @@
 import type { IncidentStatus } from "@/types/incident";
 
+export type NetworkStatus = "Operational" | "Degraded" | "Critical";
+
 type NetworkStatusIncident = {
   status: IncidentStatus;
   severity: string;
@@ -7,7 +9,7 @@ type NetworkStatusIncident = {
 
 export function calculateNetworkStatus(
   incidents: NetworkStatusIncident[],
-): string {
+): NetworkStatus {
   const activeIncidents = incidents.filter(
     (incident) =>
       incident.status === "Open" || incident.status === "Investigating",

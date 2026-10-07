@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import AppShell from "@/components/AppShell";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,21 +15,21 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "NEXUS",
-  description: "Network Intelligence & Incident Reponse Platform",
+  description: "Network Intelligence & Incident Response Platform",
   icons: {
-    icon: [
-      {url: '/logo.svg', type: 'image/svg+xml'},
-    ],
-  }
+    icon: [{ url: "/logo.svg", type: "image/svg+xml" }],
+  },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="h-full">
+        <AppShell>{children}</AppShell>
+      </body>
     </html>
   );
 }

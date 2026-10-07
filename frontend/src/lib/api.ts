@@ -20,6 +20,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export type HealthResponse = {
+  status: string;
+};
+
+export function fetchHealth(): Promise<HealthResponse> {
+  return request<HealthResponse>("/health");
+}
+
 export function fetchEvents(): Promise<Event[]> {
   return request<Event[]>("/events");
 }
