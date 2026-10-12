@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { Inventory } from "@/types/inventory";
 
 function seedSeries(eventCount: number, activeIncidents: number) {
   const base = 30 + Math.min(eventCount * 1.5, 26) + activeIncidents * 8;
@@ -25,22 +26,38 @@ function buildPath(values: number[]) {
 export default function NetworkTelemetryCharts({
   eventCount,
   activeIncidentCount,
+  inventory,
 }: {
   eventCount: number;
   activeIncidentCount: number;
+  inventory?: Inventory;
 }) {
+  const [discoveredInventory, setDiscoveredInventory] = useState<Inventory>({ devices: [], links: [] });
+  useEffect(() => {
+    if (inventory) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const response = await fetch("/api/admin/inventory", { cache: "no-store" });
+        if (response.ok) {
+          const data = await response.json() as Inventory;
+          if (!cancelled) setDiscoveredInventory(data);
+        }
+      } catch { /* Keep the last known inventory during a transient refresh failure. */ }
+    };
+    void load();
+    const timer = window.setInterval(load, 30000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [inventory]);
+  const network = inventory ?? discoveredInventory;
   const [bandwidth, setBandwidth] = useState(() => seedSeries(eventCount, activeIncidentCount));
   const [packetRate, setPacketRate] = useState(2400);
-
-  useEffect(() => {
-    setBandwidth(seedSeries(eventCount, activeIncidentCount));
-  }, [eventCount, activeIncidentCount]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
       setBandwidth((current) => {
         const previous = current.at(-1) ?? 40;
-        const incidentPressure = activeIncidentCount * 2.5;
+        const incidentPressure = activeIncidentCount * 2.5 + Math.min(eventCount * 0.02, 1);
         const next = Math.max(
           8,
           Math.min(
@@ -57,19 +74,18 @@ export default function NetworkTelemetryCharts({
     }, 2000);
 
     return () => window.clearInterval(id);
-  }, [activeIncidentCount]);
+  }, [activeIncidentCount, eventCount]);
 
   const latest = bandwidth.at(-1) ?? 0;
   const average = Math.round(bandwidth.reduce((sum, item) => sum + item, 0) / bandwidth.length);
   const path = buildPath(bandwidth);
 
   const flows = useMemo(
-    () => [
-      { label: "router-01 → router-02", value: Math.min(96, Math.round(latest * 0.9 + activeIncidentCount * 4)) },
-      { label: "router-01 → router-03", value: Math.min(90, Math.round(average * 0.72 + eventCount * 0.8)) },
-      { label: "router-02 → router-04", value: Math.min(84, Math.round(average * 0.55 + activeIncidentCount * 6)) },
-    ],
-    [latest, average, activeIncidentCount, eventCount],
+    () => network.links.slice(0, 4).map((link, index) => ({
+      label: `${network.devices.find((device) => device.id === link.source)?.name ?? link.source} → ${network.devices.find((device) => device.id === link.target)?.name ?? link.target}`,
+      value: Math.min(96, Math.round((index % 2 ? average : latest) * (0.9 - index * 0.12) + activeIncidentCount * 4)),
+    })),
+    [network, latest, average, activeIncidentCount],
   );
 
   return (

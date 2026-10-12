@@ -38,6 +38,7 @@ npm-debug.log*
 *.sqlite
 *.sqlite3
 *.sql
+!backend/schema.sql
 
 # Private keys and certificates
 *.pem
@@ -45,3 +46,6 @@ npm-debug.log*
 *.p12
 *.pfx
 *.zip
+
+# Shared live network inventory (the reference inventory is tracked in network/)
+.nexus-data/

@@ -1,9 +1,13 @@
 "use client";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 
 export default function LoginPage() {
+  return <Suspense fallback={<p className="p-6 text-slate-400">Loading sign-in…</p>}><LoginForm /></Suspense>;
+}
+
+function LoginForm() {
   const router = useRouter(); const params = useSearchParams();
   const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [error,setError]=useState(""); const [missing,setMissing]=useState(false); const [busy,setBusy]=useState(false);
   const submit=async(e:React.FormEvent)=>{e.preventDefault();setBusy(true);setError("");setMissing(false);const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});const d=await r.json();setBusy(false);if(!r.ok){setError(d.error||"Login failed");setMissing(d.code==="ACCOUNT_NOT_FOUND");return;}router.replace(params.get("next")||"/");router.refresh();};

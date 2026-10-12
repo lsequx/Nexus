@@ -1070,9 +1070,10 @@ def create_event_endpoint(
         "severity": event.severity,
     }
 
-    created_event = create_event(
-        new_event
-    )
+    try:
+        created_event = create_event(new_event)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
     analyze_events_and_create_incidents()
 

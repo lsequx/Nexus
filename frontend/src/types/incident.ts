@@ -36,6 +36,7 @@ export type Incident = {
   root_cause_type: string | null;
   root_cause_severity: string | null;
   root_cause_device: string | null;
+  root_cause_device_id?: string | null;
 
   detection_reason: string;
 

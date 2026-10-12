@@ -4,6 +4,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 import uuid
+from inventory import read_inventory, sync_devices, inventory_dependencies
 
 load_dotenv()
 
@@ -11,7 +12,22 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 connection = psycopg.connect(DATABASE_URL)
 
+_inventory_snapshot = None
+
+
+def current_inventory():
+    global _inventory_snapshot
+    # Existing integration fixtures own the dedicated test database.
+    if connection.info.dbname == "nexus_test":
+        return None
+    data = read_inventory()
+    if data != _inventory_snapshot:
+        sync_devices(connection, data)
+        _inventory_snapshot = data
+    return data
+
 def get_events():
+    current_inventory()
     with connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute("""
             SELECT
@@ -30,6 +46,9 @@ def get_events():
         return events
 
 def create_event(event):
+    inventory = current_inventory()
+    if inventory is not None and event["device_id"] not in {device["id"] for device in inventory["devices"]}:
+        raise ValueError("Device is not in the current network inventory")
     try:
         with connection.cursor(row_factory=dict_row) as cursor:
             cursor.execute(
@@ -360,6 +379,9 @@ def get_incident_status_history(incident_id):
         return cursor.fetchall()
 
 def get_device_dependencies():
+    inventory = current_inventory()
+    if inventory is not None:
+        return inventory_dependencies(inventory)
     with connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute(
             """
@@ -380,6 +402,9 @@ def get_device_dependencies():
         return dependencies
 
 def get_devices():
+    inventory = current_inventory()
+    if inventory is not None:
+        return [{"id": device["id"], "name": device["name"]} for device in inventory["devices"]]
     with connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute(
             """

@@ -1,0 +1,335 @@
+{
+  "version": 2,
+  "devices": [
+    {
+      "id": "dev-isp",
+      "name": "isp-gateway",
+      "type": "ISP Gateway",
+      "ip": "203.0.113.1",
+      "zone": "WAN",
+      "role": "Provider handoff (documentation address)",
+      "x": 50,
+      "y": 7,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-001",
+      "name": "edge-router-01",
+      "type": "Router",
+      "ip": "10.255.0.1",
+      "zone": "Edge",
+      "role": "WAN routing and external connectivity",
+      "x": 50,
+      "y": 19,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-002",
+      "name": "perimeter-fw-01",
+      "type": "Firewall",
+      "ip": "10.255.0.2",
+      "zone": "Edge",
+      "role": "Internet filtering, NAT and zone isolation",
+      "x": 50,
+      "y": 31,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-003",
+      "name": "core-switch-01",
+      "type": "Switch",
+      "ip": "10.255.0.3",
+      "zone": "Core",
+      "role": "Layer 3 core; VLAN default gateways",
+      "x": 50,
+      "y": 46,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-dmz",
+      "name": "dmz-switch-01",
+      "type": "Switch",
+      "ip": "10.255.10.2",
+      "zone": "DMZ",
+      "role": "VLAN 10: public service segment",
+      "x": 14,
+      "y": 46,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-web",
+      "name": "reverse-proxy-01",
+      "type": "Server",
+      "ip": "10.10.10.10",
+      "zone": "DMZ",
+      "role": "Public HTTPS reverse proxy; VLAN 10",
+      "x": 14,
+      "y": 63,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-tor-a",
+      "name": "rack-a-tor-01",
+      "type": "Switch",
+      "ip": "10.255.20.2",
+      "zone": "Data center",
+      "role": "Top-of-rack access for application servers",
+      "x": 30,
+      "y": 63,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-tor-b",
+      "name": "rack-b-tor-01",
+      "type": "Switch",
+      "ip": "10.255.30.2",
+      "zone": "Data center",
+      "role": "Top-of-rack access for database and storage",
+      "x": 53,
+      "y": 63,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-app",
+      "name": "app-server-01",
+      "type": "Server",
+      "ip": "10.20.0.10",
+      "zone": "Data center",
+      "role": "Application tier; VLAN 20",
+      "x": 25,
+      "y": 81,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-hypervisor",
+      "name": "hypervisor-01",
+      "type": "Server",
+      "ip": "10.20.0.20",
+      "zone": "Data center",
+      "role": "Virtualization host; VLAN 20",
+      "x": 35,
+      "y": 81,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-db",
+      "name": "db-server-01",
+      "type": "Server",
+      "ip": "10.30.0.10",
+      "zone": "Data center",
+      "role": "Private database tier; VLAN 30",
+      "x": 48,
+      "y": 81,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-storage",
+      "name": "storage-01",
+      "type": "Storage",
+      "ip": "10.30.0.20",
+      "zone": "Data center",
+      "role": "Backup and storage; VLAN 30",
+      "x": 58,
+      "y": 81,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-004",
+      "name": "access-switch-01",
+      "type": "Switch",
+      "ip": "10.255.40.2",
+      "zone": "LAN",
+      "role": "PoE office access switch",
+      "x": 83,
+      "y": 63,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-ap",
+      "name": "office-ap-01",
+      "type": "Access Point",
+      "ip": "10.255.40.10",
+      "zone": "Wireless",
+      "role": "Corporate WLAN bridge; clients in VLAN 50",
+      "x": 72,
+      "y": 81,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-laptop",
+      "name": "wireless-client-01",
+      "type": "Computer",
+      "ip": "10.50.0.100",
+      "zone": "Wireless",
+      "role": "Corporate wireless endpoint; VLAN 50",
+      "x": 72,
+      "y": 93,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-workstation",
+      "name": "workstation-01",
+      "type": "Computer",
+      "ip": "10.40.0.100",
+      "zone": "LAN",
+      "role": "Wired operator workstation; VLAN 40",
+      "x": 83,
+      "y": 81,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-printer",
+      "name": "printer-01",
+      "type": "Printer",
+      "ip": "10.40.0.200",
+      "zone": "LAN",
+      "role": "Office printer; VLAN 40",
+      "x": 94,
+      "y": 81,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-vpn",
+      "name": "vpn-gateway-01",
+      "type": "Gateway",
+      "ip": "10.255.60.1",
+      "zone": "Edge",
+      "role": "Remote-access VPN termination",
+      "x": 77,
+      "y": 46,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-mgmt",
+      "name": "oob-switch-01",
+      "type": "Switch",
+      "ip": "10.99.0.2",
+      "zone": "Management",
+      "role": "Independent out-of-band management network",
+      "x": 14,
+      "y": 81,
+      "status": "Operational"
+    },
+    {
+      "id": "dev-jump",
+      "name": "management-host-01",
+      "type": "Server",
+      "ip": "10.99.0.10",
+      "zone": "Management",
+      "role": "Management jump host; VLAN 99",
+      "x": 14,
+      "y": 93,
+      "status": "Operational"
+    }
+  ],
+  "links": [
+    {
+      "id": "link-dev-isp-dev-001",
+      "source": "dev-isp",
+      "target": "dev-001",
+      "label": "Provider handoff"
+    },
+    {
+      "id": "link-dev-001-dev-002",
+      "source": "dev-001",
+      "target": "dev-002",
+      "label": "Routed WAN transit"
+    },
+    {
+      "id": "link-dev-002-dev-003",
+      "source": "dev-002",
+      "target": "dev-003",
+      "label": "Trusted-zone transit"
+    },
+    {
+      "id": "link-dev-002-dev-dmz",
+      "source": "dev-002",
+      "target": "dev-dmz",
+      "label": "DMZ VLAN 10"
+    },
+    {
+      "id": "link-dev-dmz-dev-web",
+      "source": "dev-dmz",
+      "target": "dev-web",
+      "label": "DMZ access"
+    },
+    {
+      "id": "link-dev-002-dev-vpn",
+      "source": "dev-002",
+      "target": "dev-vpn",
+      "label": "VPN zone"
+    },
+    {
+      "id": "link-dev-003-dev-tor-a",
+      "source": "dev-003",
+      "target": "dev-tor-a",
+      "label": "Rack A uplink"
+    },
+    {
+      "id": "link-dev-003-dev-tor-b",
+      "source": "dev-003",
+      "target": "dev-tor-b",
+      "label": "Rack B uplink"
+    },
+    {
+      "id": "link-dev-003-dev-004",
+      "source": "dev-003",
+      "target": "dev-004",
+      "label": "Office trunk: VLANs 40/50"
+    },
+    {
+      "id": "link-dev-tor-a-dev-app",
+      "source": "dev-tor-a",
+      "target": "dev-app",
+      "label": "VLAN 20 access"
+    },
+    {
+      "id": "link-dev-tor-a-dev-hypervisor",
+      "source": "dev-tor-a",
+      "target": "dev-hypervisor",
+      "label": "VLAN 20 access"
+    },
+    {
+      "id": "link-dev-tor-b-dev-db",
+      "source": "dev-tor-b",
+      "target": "dev-db",
+      "label": "VLAN 30 access"
+    },
+    {
+      "id": "link-dev-tor-b-dev-storage",
+      "source": "dev-tor-b",
+      "target": "dev-storage",
+      "label": "VLAN 30 access"
+    },
+    {
+      "id": "link-dev-004-dev-ap",
+      "source": "dev-004",
+      "target": "dev-ap",
+      "label": "PoE + WLAN trunk"
+    },
+    {
+      "id": "link-dev-ap-dev-laptop",
+      "source": "dev-ap",
+      "target": "dev-laptop",
+      "label": "Corporate Wi-Fi"
+    },
+    {
+      "id": "link-dev-004-dev-workstation",
+      "source": "dev-004",
+      "target": "dev-workstation",
+      "label": "VLAN 40 access"
+    },
+    {
+      "id": "link-dev-004-dev-printer",
+      "source": "dev-004",
+      "target": "dev-printer",
+      "label": "VLAN 40 access"
+    },
+    {
+      "id": "link-dev-mgmt-dev-jump",
+      "source": "dev-mgmt",
+      "target": "dev-jump",
+      "label": "OOB VLAN 99"
+    }
+  ]
+}

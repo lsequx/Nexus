@@ -4,6 +4,8 @@ export type InventoryDevice = {
   type: string;
   ip: string;
   status: "Operational" | "Degraded" | "Critical";
+  zone?: string;
+  role?: string;
   x: number;
   y: number;
 };
@@ -16,6 +18,7 @@ export type InventoryLink = {
 };
 
 export type Inventory = {
+  version?: number;
   devices: InventoryDevice[];
   links: InventoryLink[];
 };

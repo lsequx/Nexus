@@ -4,36 +4,47 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { simulationScenarios } from "@/data/scenarios";
 import { createEvent, fetchIncidents } from "@/lib/api";
+import { defaultInventory } from "@/data/inventory";
+import type { Inventory } from "@/types/inventory";
 
 export default function ScenariosPage() {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState(simulationScenarios[0].id);
   const [running, setRunning] = useState(false);
+  const [error, setError] = useState("");
 
   const selected = simulationScenarios.find((scenario) => scenario.id === selectedId) ?? simulationScenarios[0];
 
   const runScenario = async () => {
     if (running) return;
     setRunning(true);
+    setError("");
 
     try {
-      const before = await fetchIncidents();
-      const beforeIds = new Set(before.map((incident) => incident.id));
-
+      const inventoryResponse = await fetch("/api/admin/inventory", { cache: "no-store" });
+      if (!inventoryResponse.ok) throw new Error("Unable to load the network inventory.");
+      const inventory = await inventoryResponse.json() as Inventory;
+      const missing = selected.events.filter((event) => !inventory.devices.some((device) => device.id === event.device_id));
+      if (missing.length) throw new Error("This scenario requires reference devices that are absent from your custom inventory.");
+      const emittedIds = new Set<string>();
       for (const event of selected.events) {
-        await createEvent(event);
+        const created = await createEvent(event);
+        emittedIds.add(created.id);
       }
 
       const after = await fetchIncidents();
-      const created = after.find((incident) => !beforeIds.has(incident.id));
-      const newestActive = after.find((incident) => incident.status === "Open" || incident.status === "Investigating");
-      const target = created ?? newestActive;
+      const target = after.find((incident) =>
+        (incident.root_cause_event_id !== null && emittedIds.has(incident.root_cause_event_id)) ||
+        incident.evidence_events.some((event) => emittedIds.has(event.id)),
+      );
 
       if (target) {
         router.push(`/incidents/${target.id}`);
       } else {
         router.push("/events");
       }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Scenario could not be completed.");
     } finally {
       setRunning(false);
     }
@@ -62,12 +73,13 @@ export default function ScenariosPage() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-400">Intelligence lab</p>
           <h1 className="mt-2 text-2xl font-bold text-white">{selected.name}</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">{selected.description}</p>
+          {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
 
           <div className="mt-6 min-h-0 flex-1 space-y-2 overflow-y-auto">
             {selected.events.map((event, index) => (
               <div key={`${event.device_id}-${index}`} className="grid grid-cols-[44px_1fr_auto_auto] items-center gap-4 rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3">
                 <span className="text-xs font-bold text-slate-600">#{index + 1}</span>
-                <span className="font-semibold text-slate-200">{event.device_id}</span>
+                <span className="font-semibold text-slate-200">{defaultInventory.devices.find((device) => device.id === event.device_id)?.name ?? event.device_id}</span>
                 <span className="text-xs text-slate-400">{event.type}</span>
                 <span className="text-xs font-semibold text-slate-300">{event.severity}</span>
               </div>

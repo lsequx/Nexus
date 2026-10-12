@@ -44,7 +44,7 @@ When a network misbehaves, operators don't get one clean alert. They get a flood
 | 💥 | **Impact analysis** | Separates *observed* impact from *potential* downstream impact based on dependency scope. |
 | 🔄 | **Incident lifecycle tracking** | Operator status transitions are recorded for a complete audit trail. |
 | 📝 | **Operator notes** | Investigation knowledge is saved with the incident so it's available for future ones. |
-| 🧪 | **Scenario simulation lab** | A library of 7 scripted failure scenarios lets you replay situations (isolated packet loss, repeated unreachable devices, upstream failure with downstream loss, and more) and watch NEXUS reason through them. |
+| 🧪 | **Scenario simulation lab** | A library of 9 scripted failure scenarios lets you replay situations (isolated packet loss, repeated unreachable devices, upstream failure with downstream loss, and more) and watch NEXUS reason through them. |
 | 📡 | **Live demo telemetry** | Simulated bandwidth and per-link traffic-flow visualizations, with an optional automatic event generation feed. |
 | 🔐 | **Secure authentication** | Session-based auth with signed tokens, HttpOnly cookies, and scrypt password hashing. |
 
@@ -190,6 +190,10 @@ The frontend and backend are fully decoupled and communicate only through the RE
 
 ---
 
+## Reference Network
+
+The demo now includes 20 devices spanning a WAN gateway, edge router, firewall, L3 core, DMZ, server racks, office access, wireless clients, VPN gateway, and an independent management network. Inventory edits feed both the topology screen and backend correlation. See [the topology design and setup guide](docs/network-topology.md) for addressing, dependency semantics, compatibility, and local setup.
+
 ## Getting Started
 
 ### Prerequisites
@@ -197,16 +201,9 @@ The frontend and backend are fully decoupled and communicate only through the RE
 - [Docker](https://www.docker.com/) and Docker Compose  
   *or*, to run services individually: Node.js 18+, Python 3.11+, and PostgreSQL
 
-### Run with Docker Compose
+### Local development
 
-```bash
-git clone https://github.com/lsequx/nexus.git
-cd nexus
-
-docker compose up --build
-```
-
-Then open **http://localhost:3000**, create an account, and sign in.
+This checkout supports the local commands below. Docker Compose files are not included; use the [setup guide](docs/network-topology.md) to prepare PostgreSQL and the shared inventory.
 
 ### Run locally (without Docker)
 
@@ -216,7 +213,9 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+# Create a local nexus database and initialize backend/schema.sql first.
+export DATABASE_URL="postgresql://YOUR_LOCAL_USER@127.0.0.1:5432/nexus"
+uvicorn main:app --reload
 ```
 
 **Frontend**
@@ -229,7 +228,7 @@ npm run dev
 ### Try it out
 
 1. Sign in and open the **Scenarios** tab.
-2. Pick a scenario such as *Upstream Failure + Packet Loss* and click **Run Scenario**.
+2. Pick a scenario such as *Firewall Failure Across Security Zones* and click **Run Scenario**.
 3. NEXUS opens the resulting incident automatically. Expand **NEXUS Analysis** to see the root cause and the factor-by-factor confidence breakdown.
 4. Check **Topology** to see how the dependency map relates to what was diagnosed.
 5. Toggle **Live Demo Feed** on the Overview page to watch automatic event generation and live telemetry.
@@ -238,10 +237,10 @@ npm run dev
 
 ```bash
 # Backend
-cd backend && pytest
+cd backend && DATABASE_URL="postgresql://YOUR_LOCAL_USER@127.0.0.1:5432/nexus_test" python -m pytest
 
 # Frontend
-cd frontend && npm test
+cd frontend && npm test -- --run
 ```
 
 ---
@@ -252,13 +251,15 @@ NEXUS ships with scripted scenarios so its reasoning can be demonstrated and reg
 
 | Scenario | Events | What it demonstrates |
 |---|:---:|---|
-| Isolated Packet Loss | 1 | A single signal with no corroboration stays an *event*, not an incident |
-| Repeated Device Unreachable | 2 | Repeated evidence on one device escalates to an incident |
-| Upstream Failure + Packet Loss | 2 | Topology separates the true root cause from downstream symptoms |
-| Evolving Incident Diagnosis | 3 | The assessment is revised as new evidence arrives |
-| Independent Device Failures | 4 | Unrelated failures aren't wrongly merged into one incident |
-| Latency Degradation | 3 | Performance issues correlated without a hard outage |
-| Mixed Severity Traffic Event | 3 | Critical and major signals weighed together |
+| Isolated Wireless Packet Loss | 1 | A wireless endpoint signal remains an event without corroboration |
+| Access Point Offline | 2 | Repeated AP failures scope wireless clients, not wired endpoints |
+| Firewall Failure Across Security Zones | 3 | Common upstream firewall evidence spans DMZ and application branches |
+| Evolving Core Switch Outage | 4 | Server and office symptoms strengthen an existing core diagnosis |
+| Independent DMZ and Storage Failures | 4 | Unrelated endpoint failures stay independent |
+| Rack Uplink Congestion | 3 | Latency remains localized to a server rack |
+| Office Access Switch Failure | 3 | Wired and wireless symptoms share an access switch |
+| WAN Provider Outage | 3 | Provider failure scopes internet dependencies |
+| Out-of-Band Management Outage | 2 | Management failures stay separate from production workloads |
 
 ---
 
