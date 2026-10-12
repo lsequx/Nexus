@@ -51,7 +51,7 @@ export default function ScenariosPage() {
   };
 
   return (
-    <main className="h-full overflow-hidden p-5">
+    <main className="h-full overflow-auto p-4 sm:p-6 lg:p-8">
       <div className="mx-auto grid h-full max-w-[1400px] min-h-0 grid-cols-[360px_minmax(0,1fr)] gap-4">
         <aside className="min-h-0 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/55 p-3">
           <p className="px-2 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-400">Scenario library</p>
@@ -71,7 +71,7 @@ export default function ScenariosPage() {
 
         <section className="flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-slate-900/55 p-6">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-400">Intelligence lab</p>
-          <h1 className="mt-2 text-2xl font-bold text-white">{selected.name}</h1>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">{selected.name}</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">{selected.description}</p>
           {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
 

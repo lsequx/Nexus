@@ -23,6 +23,7 @@ export default function TopologyPage() {
   const [selectedId, setSelectedId] = useState("");
   const [incidentId, setIncidentId] = useState("");
   const [error, setError] = useState("");
+  const [zoom, setZoom] = useState(0.65);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,22 +62,23 @@ export default function TopologyPage() {
   };
 
   return (
-    <main className="h-full overflow-auto p-5">
+    <main className="h-full overflow-auto p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-[1800px] space-y-4">
         <section className="rounded-2xl border border-slate-800 bg-slate-900/55 p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-400">WAN · DMZ · Data center · LAN · Wireless · Management</p><h1 className="mt-1 text-2xl font-bold text-white">Network Topology</h1><p className="mt-2 max-w-3xl text-xs leading-5 text-slate-400">Scroll to explore the full site. Arrows run from upstream service to dependent device. Select an asset to inspect its role, management address, and connections. Potential impact is dependency scope, not proof of an outage.</p></div>
+            <div><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-400">WAN · DMZ · Data center · LAN · Wireless · Management</p><h1 className="mt-1 text-3xl font-semibold tracking-tight text-white">Network Topology</h1><p className="mt-2 max-w-3xl text-xs leading-5 text-slate-400">Scroll to explore the full site. Arrows run from upstream service to dependent device. Select an asset to inspect its role, management address, and connections. Potential impact is dependency scope, not proof of an outage.</p></div>
             <StatusIndicator status={calculateNetworkStatus(incidents)} label="Network" />
           </div>
           {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
           <div className="mt-4 flex flex-wrap items-center gap-4 text-xs">
             <span className="text-slate-400">{inventory.devices.length} assets · {inventory.links.length} dependencies</span>
+            <div role="group" aria-label="Map zoom controls" className="flex items-center rounded-lg border border-slate-700 bg-slate-950"><button aria-label="Zoom out" disabled={zoom <= 0.35} onClick={() => setZoom(value => Math.max(0.35, Math.round((value - 0.15) * 100) / 100))} className="px-3 py-2 text-slate-200 disabled:opacity-30">−</button><button aria-label="Reset map zoom" onClick={() => setZoom(0.65)} className="min-w-14 px-2 py-2 tabular-nums text-slate-400">{Math.round(zoom * 100)}%</button><button aria-label="Zoom in" disabled={zoom >= 1.25} onClick={() => setZoom(value => Math.min(1.25, Math.round((value + 0.15) * 100) / 100))} className="px-3 py-2 text-slate-200 disabled:opacity-30">+</button></div>
             <span className="text-red-400">● Root cause</span><span className="text-orange-400">● Observed impact</span><span className="text-amber-400">● Potential impact</span>
             {activeIncidents.length > 0 && <select aria-label="Incident to highlight" value={activeIncident?.id ?? ""} onChange={(event) => setIncidentId(event.target.value)} className="max-w-sm rounded-lg border border-slate-700 bg-slate-950 p-2 text-slate-300">{activeIncidents.map((incident) => <option key={incident.id} value={incident.id}>{incident.title}</option>)}</select>}
           </div>
           <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-            <div className="overflow-auto rounded-xl border border-slate-800 bg-slate-950/50">
-              <div className="relative h-[1100px] min-w-[1800px]">
+            <div tabIndex={0} aria-label="Network dependency map; scroll to explore and select an asset" className="overflow-auto rounded-xl border border-slate-800 bg-slate-950/50">
+              <div className="topology-canvas relative h-[1100px] w-[1800px]" style={{ zoom }}>
                 <svg aria-hidden="true" className="absolute inset-0 h-full w-full" viewBox="0 0 1800 1100" preserveAspectRatio="none">
                   <defs><marker id="dependency-arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs>
                   {inventory.links.map((link) => {

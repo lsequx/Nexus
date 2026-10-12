@@ -63,11 +63,11 @@ export default function AdminPage() {
   };
 
   return (
-    <main className="h-full overflow-hidden p-5">
+    <main className="h-full overflow-auto p-4 sm:p-6 lg:p-8">
       <div className="mx-auto grid h-full max-w-[1500px] min-h-0 grid-cols-[390px_minmax(0,1fr)] gap-4">
         <section className="overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/55 p-5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-300">Administrator</p>
-          <h1 className="mt-1 text-2xl font-bold text-white">Network Inventory</h1>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-white">Network Inventory</h1>
           <p className="mt-2 text-xs leading-5 text-slate-500">Manage network assets and upstream dependencies across security zones. Changes feed the topology view and backend event correlation.</p>
 
           {message && <div className="mt-4 rounded-xl border border-slate-700 bg-slate-950/60 p-3 text-xs text-slate-300">{message}</div>}

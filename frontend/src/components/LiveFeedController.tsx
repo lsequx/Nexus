@@ -65,7 +65,9 @@ export default function LiveFeedController({ onActivity }: { onActivity?: () => 
       <button
         onClick={() => { localStorage.setItem("nexus-live-demo", String(!enabled)); window.dispatchEvent(new Event("nexus-live-demo-change")); }}
         className={`relative h-6 w-11 rounded-full transition ${enabled ? "bg-emerald-400" : "bg-slate-700"}`}
-        aria-label="Toggle live demo feed"
+        role="switch"
+        aria-checked={enabled}
+        aria-label="Automatic simulated event generation"
       >
         <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${enabled ? "left-6" : "left-1"}`} />
       </button>

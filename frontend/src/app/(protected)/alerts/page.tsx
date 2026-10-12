@@ -22,11 +22,11 @@ export default function AlertsPage() {
   );
 
   return (
-    <main className="h-full overflow-hidden p-5">
+    <main className="h-full overflow-auto p-4 sm:p-6 lg:p-8">
       <div className="mx-auto flex h-full max-w-[1500px] min-h-0 flex-col gap-4">
         <header className="shrink-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-red-400">Attention queue</p>
-          <h1 className="mt-1 text-2xl font-bold text-white">Alerts</h1>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-white">Alerts</h1>
           <p className="mt-1 text-xs text-slate-500">Derived from Critical and Major network events · {alerts.length} active records</p>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
