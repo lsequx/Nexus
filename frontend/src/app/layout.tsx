@@ -17,7 +17,9 @@ export const metadata: Metadata = {
   title: "NEXUS",
   description: "Network Intelligence & Incident Response Platform",
   icons: {
-    icon: [{ url: "/logo.svg", type: "image/svg+xml" }],
+    icon: [{ url: "/nexus-logo.png", type: "image/png", sizes: "512x512" }],
+    shortcut: "/favicon.ico",
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

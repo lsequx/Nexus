@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import NexusMark from "@/components/NexusMark";
 import NavIcon from "./NavIcon";
 
 type User = { id: string; name: string; email: string; role: "admin" | "operator" | "viewer" };
@@ -57,7 +58,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     <div className="nexus-workspace flex h-dvh min-h-0 overflow-hidden bg-slate-950 text-slate-100">
       <a href="#workspace-content" className="skip-link">Skip to content</a>
       <aside className="hidden w-[224px] shrink-0 flex-col border-r border-slate-800 bg-[#080f1d] lg:flex">
-        <Link href="/" className="flex items-center gap-3 px-6 py-7" aria-label="NEXUS overview"><span className="brand-mark">NX</span><span><span className="block text-lg font-bold tracking-[0.14em] text-white">NEXUS</span><span className="block whitespace-nowrap text-[9px] tracking-[0.08em] text-slate-400">NETWORK INTELLIGENCE</span></span></Link>
+        <Link href="/" className="flex items-center gap-3 px-6 py-7" aria-label="NEXUS overview"><span className="brand-mark"><NexusMark /></span><span><span className="block text-lg font-bold tracking-[0.14em] text-white">NEXUS</span><span className="block whitespace-nowrap text-[9px] tracking-[0.08em] text-slate-400">NETWORK INTELLIGENCE</span></span></Link>
         <p className="px-6 pb-3 pt-5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Workspace</p>
         <nav aria-label="Main navigation" className="space-y-1 px-3">
           {navItems.map((item) => {
@@ -71,7 +72,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="shrink-0 border-b border-slate-800 bg-[#080f1d] px-4 py-3 sm:px-6">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3"><span className="lg:hidden"><Link href="/" className="brand-mark" aria-label="NEXUS overview">NX</Link></span><span className="hidden text-xs text-slate-500 sm:inline">Workspace <span className="px-2 text-slate-600">/</span></span><span className="truncate text-sm font-medium text-slate-200">{current}</span></div>
+            <div className="flex min-w-0 items-center gap-3"><Link href="/" className="brand-mark" aria-label="NEXUS overview"><NexusMark /></Link><span className="hidden text-xs text-slate-500 sm:inline">Workspace <span className="px-2 text-slate-600">/</span></span><span className="truncate text-sm font-medium text-slate-200">{current}</span></div>
             <div className="flex items-center gap-3"><span className="hidden rounded-md border border-slate-700 px-2 py-1 text-[10px] uppercase tracking-wider text-slate-400 sm:block">Simulation workspace</span><div className="hidden text-right md:block"><p className="max-w-40 truncate text-xs font-semibold text-slate-200">{user?.name}</p><p className="text-[10px] capitalize text-slate-400">{user?.role}</p></div><button onClick={logout} disabled={signingOut} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50">{signingOut ? "Signing out…" : "Sign out"}</button></div>
           </div>
           {logoutError && <p role="alert" className="mt-2 text-xs text-red-300">{logoutError}</p>}
