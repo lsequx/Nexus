@@ -27,7 +27,7 @@
 
 When a network misbehaves, operators don't get one clean alert. They get a flood of them: interface flaps, latency spikes, unreachable devices, packet loss. Most of those alerts are symptoms of a single underlying failure, and a NOC analyst has to work out which one while the clock is running.
 
-**NEXUS** is a network intelligence and incident response platform built to shorten that gap. It ingests live or simulated telemetry, correlates related events into incidents, uses the network's **topology** to identify the most likely root cause, and attaches a transparent **confidence score** that explains *why* it reached that conclusion. As new evidence arrives, the diagnosis updates and the full history of how it changed is preserved.
+**NEXUS** is a network intelligence and incident response platform built to shorten that gap. It ingests network events through an authenticated API, correlates related events into incidents, uses the network's **topology** to identify the most likely root cause, and attaches a transparent **confidence score** that explains *why* it reached that conclusion. As new evidence arrives, the diagnosis updates and the full history of how it changed is preserved.
 
 > NEXUS doesn't just tell you something is wrong. It shows you what is probably causing it, how sure it is, what else may be affected, and how that picture changed over time.
 
@@ -46,7 +46,7 @@ When a network misbehaves, operators don't get one clean alert. They get a flood
 | 📝 | **Operator notes** | Investigation knowledge is saved with the incident so it's available for future ones. |
 | 🧪 | **Scenario simulation lab** | A library of 9 scripted failure scenarios lets you replay situations (isolated packet loss, repeated unreachable devices, upstream failure with downstream loss, and more) and watch NEXUS reason through them. |
 | 📡 | **Live demo telemetry** | Simulated bandwidth and per-link traffic-flow visualizations, with an optional automatic event generation feed. |
-| 🔐 | **Secure authentication** | Session-based auth with signed tokens, HttpOnly cookies, and scrypt password hashing. |
+| 🔐 | **Secure authentication** | Signed sessions, HttpOnly cookies, scrypt password hashing, and viewer/operator/admin access controls. |
 
 ---
 
@@ -91,7 +91,7 @@ When a network misbehaves, operators don't get one clean alert. They get a flood
 
 ```mermaid
 flowchart LR
-    A[Telemetry & Events<br/>live or simulated] --> B[Event Correlation]
+    A[Telemetry & Events<br/>API events or simulation] --> B[Event Correlation]
     B --> C[Topology-Aware<br/>Root-Cause Analysis]
     C --> D[Confidence Scoring]
     D --> E[Incident<br/>+ Impact Analysis]
@@ -99,7 +99,7 @@ flowchart LR
     A -. new evidence .-> C
 ```
 
-1. **Ingest.** Network events (`interface_down`, `device_unreachable`, `packet_loss`, `high_latency`) arrive from live or simulated telemetry, each tagged with a device and severity.
+1. **Ingest.** Network events (`interface_down`, `device_unreachable`, `packet_loss`, `high_latency`) arrive through the event API or scenario simulation, each tagged with a device and severity.
 2. **Correlate.** Related events are grouped together rather than treated as independent alerts.
 3. **Locate the root cause.** The dependency map is consulted to find which device is the likely origin and which are downstream symptoms.
 4. **Score.** A confidence score is assembled from explicit, visible factors. For example, an incident might score `88/100`: detection basis `+65`, evidence severity `+8`, evidence diversity `+5`, topology confirmation `+10`.
@@ -131,7 +131,8 @@ Black-box "AI says it's the router" output isn't useful during an outage. Operat
 ### Data
 | Technology | Role |
 |---|---|
-| **PostgreSQL** | Relational storage for events, incidents, analysis history, notes, and users |
+| **PostgreSQL** | Relational storage for device identities, events, incidents, analysis history, and lifecycle transitions |
+| **Private JSON files** | Persistent accounts, operator notes, and shared inventory; stored in application data volumes in Docker |
 | **Psycopg** | PostgreSQL driver for direct, explicit database access |
 
 ### Security
@@ -149,7 +150,7 @@ Black-box "AI says it's the router" output isn't useful during an outage. Operat
 ### DevOps & Tooling
 | Technology | Role |
 |---|---|
-| **Docker / Docker Compose** | Reproducible multi-service environment |
+| **Docker / Docker Compose** | One container running Next.js, FastAPI, and PostgreSQL, with persistent named volumes |
 | **Git & GitHub** | Version control and collaboration |
 | **VS Code & IntelliJ IDEA** | Development environments |
 
@@ -167,36 +168,28 @@ Built from scratch for this project, not pulled from a library:
 
 ```mermaid
 flowchart TB
-    subgraph Client["Frontend · Next.js · React · TypeScript · Tailwind"]
-        UI[Overview · Incidents · Alerts<br/>Events · Scenarios · Topology]
-    end
-
-    subgraph Server["Backend · FastAPI · Python"]
-        API[REST API]
-        AUTH[Auth<br/>signed sessions · scrypt]
-        ENGINE[Intelligence Engine<br/>correlation · RCA · scoring]
-    end
-
-    DB[(PostgreSQL)]
-
-    UI -- JSON over HTTPS<br/>HttpOnly cookie --> API
-    API --> AUTH
-    API --> ENGINE
-    ENGINE --> DB
-    AUTH --> DB
+    Browser[Browser] --> UI[Next.js UI]
+    UI --> AUTH[Next.js authentication and API routes<br/>signed sessions · roles · scrypt]
+    AUTH --> FILES[(Private files<br/>accounts · notes · inventory)]
+    AUTH -- Private server-to-server API key --> API[FastAPI internal API]
+    API --> ENGINE[Intelligence Engine<br/>correlation · RCA · scoring]
+    ENGINE --> DB[(PostgreSQL<br/>events · incidents · analysis history)]
+    FILES -. Shared inventory .-> ENGINE
 ```
 
-The frontend and backend are fully decoupled and communicate only through the REST API, so either side can be developed, tested, and deployed independently.
+Browser requests use the frontend's authenticated `/backend` proxy. The backend requires a private API key that stays on the server. Docker packages the frontend, backend, and database into one container; only the frontend's port is published on your computer's loopback interface.
 
 ---
 
 ## Security
 
-See [SECURITY.md](SECURITY.md) for authenticated API access, private signing keys, owner-only administrator/password commands, deployment boundaries, and dependency-audit findings.
+Data APIs require authentication. Viewers can read, operators can run scenarios and update incidents, and administrators can edit inventory. Signup creates operator accounts; administrator access requires an owner command. Sessions use private persistent signing keys, and logout, password changes, and role changes revoke previous sessions. Requests also have origin checks, input limits, and rate limits.
+
+Online password recovery is disabled until verified email delivery exists; use the owner command below. See [SECURITY.md](SECURITY.md) for access boundaries, external HTTPS configuration, and dependency-audit findings, including the remaining development-only dependency advisory.
 
 ## Reference Network
 
-The demo now includes 20 devices spanning a WAN gateway, edge router, firewall, L3 core, DMZ, server racks, office access, wireless clients, VPN gateway, and an independent management network. Inventory edits feed both the topology screen and backend correlation. See [the topology design and setup guide](docs/network-topology.md) for addressing, dependency semantics, compatibility, and local setup.
+The demo now includes 20 devices spanning a WAN gateway, edge router, firewall, L3 core, DMZ, server racks, office access, wireless clients, VPN gateway, and an independent management network. The 20 assets are connected by 18 directed dependencies across 8 zones. Arrows point from upstream services to dependent devices. Inventory edits feed both the topology screen and backend correlation. This is a logical dependency model with simulated telemetry; it does not configure or emulate physical routers, routing protocols, firewall policies, or high-availability failover. See [the topology design and setup guide](docs/network-topology.md) for addressing, dependency semantics, compatibility, and local setup.
 
 ## Getting Started
 
@@ -207,37 +200,80 @@ The demo now includes 20 devices spanning a WAN gateway, edge router, firewall, 
 
 ### Run everything with Docker (one container)
 
-Install and start Docker Desktop (or Docker Engine with Compose), then run from the repository root:
+Install and start Docker Desktop (Linux containers on Windows), or Docker Engine with the Compose plugin. For a new checkout:
 
 ```sh
+git clone https://github.com/lsequx/Nexus.git
+cd Nexus
 docker compose up --build -d --wait
 ```
 
-Open **http://localhost:3000**, create an operator account, and sign in. For inventory administration, use the owner-only promotion command in the Docker guide. One container runs PostgreSQL, FastAPI, and Next.js; named volumes retain database data, accounts, notes, and inventory. No local Python, Node.js, database setup, or `.env` file is needed. See [Docker setup and operation](docs/docker.md) for port changes, backups, existing-database guidance, and troubleshooting.
+Open **http://localhost:3000**, create an operator account with a 12–128 character password, and sign in. One container runs PostgreSQL 17, FastAPI, and a production Next.js frontend. No local Python, Node.js, database setup, or `.env` file is needed. The first build needs internet access to download dependencies and Google Fonts.
 
-### Local development
+To edit **Admin → Network Inventory**, promote your registered account from your own terminal, then sign out and sign in again:
 
-Alternatively, use the local commands below and the [setup guide](docs/network-topology.md) to prepare PostgreSQL and the shared inventory.
+```sh
+docker compose exec --user nexus nexus /opt/venv/bin/python /app/docker/manage-user.py promote-admin your-email@example.com
+```
 
-### Run locally (without Docker)
+For a forgotten password, run the following command; it prompts for a new password without echoing it:
 
-**Backend**
-```bash
+```sh
+docker compose exec --user nexus nexus /opt/venv/bin/python /app/docker/manage-user.py reset-password your-email@example.com
+```
+
+### Updates and everyday Docker commands
+
+Run these from the repository root. Preserve any local edits before pulling:
+
+```sh
+# Update the checkout and rebuild
+git pull --ff-only origin main
+docker compose up --build -d --wait
+
+# Check status or follow logs
+docker compose ps
+docker compose logs -f nexus
+
+# Stop while retaining stored data
+docker compose down
+
+# Start again using the existing image
+docker compose up -d --wait
+```
+
+The `nexus-db` and `nexus-app` named volumes retain database records, accounts, notes, inventory, and private credentials across container recreation. **`docker compose down -v` deletes both volumes and their data.** After upgrading from the earlier authentication implementation, sign in again; existing accounts are retained.
+
+If port 3000 is occupied, put `NEXUS_PORT=3100` in a repository-root `.env` file, then use the same startup command and open **http://localhost:3100**. The bundled database does not publish port 5432 or automatically import an existing standalone database. See [Docker setup and operation](docs/docker.md) for migration guidance, backups, database access, and troubleshooting. Backups must include both the database and application files.
+
+### Local development (without Docker)
+
+These commands use a POSIX shell. On Windows, activate the virtual environment with `.venv\Scripts\activate` and set environment variables using your shell's syntax.
+
+Prepare a local PostgreSQL database named `nexus` and a role with access to it. From the repository root, initialize the schema using your own local connection details:
+
+```sh
+export DATABASE_URL="postgresql://YOUR_LOCAL_USER@127.0.0.1:5432/nexus"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/schema.sql
+
 cd backend
 python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
-# Create a local nexus database and initialize backend/schema.sql first.
-export DATABASE_URL="postgresql://YOUR_LOCAL_USER@127.0.0.1:5432/nexus"
-uvicorn main:app --reload
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-**Frontend**
-```bash
+In a second terminal, from the repository root:
+
+```sh
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
+
+Open **http://localhost:3000**. Both services use the shared inventory at `.nexus-data/inventory.json` in the repository root. Accounts, notes, and generated private keys default to `frontend/.nexus-data`. If overriding `NEXUS_DATA_DIR` or `NEXUS_INVENTORY_FILE`, configure the same absolute paths for both services. Keep these runtime files and credentials out of Git. See [the topology setup guide](docs/network-topology.md) for details.
+
+For local administrator access, use your activated backend virtual environment to run `python docker/manage-user.py promote-admin your-email@example.com` from the repository root, then sign out and sign in again.
 
 ### Try it out
 
@@ -249,13 +285,29 @@ npm run dev
 
 ### Running the tests
 
-```bash
-# Backend
-cd backend && DATABASE_URL="postgresql://YOUR_LOCAL_USER@127.0.0.1:5432/nexus_test" python -m pytest
+With Docker running, test the backend against the isolated `nexus_test` database:
 
-# Frontend
-cd frontend && npm test -- --run
+```sh
+docker compose exec -w /app/backend nexus /opt/venv/bin/python -c 'import os, sys; from security import database_url; os.environ["DATABASE_URL"] = database_url("nexus_test"); import pytest; sys.exit(pytest.main(["-q"]))'
 ```
+
+For native development, create a separate `nexus_test` PostgreSQL database and apply `backend/schema.sql` to it before running backend tests. Run each block from the repository root:
+
+```sh
+cd backend
+# Activate the virtual environment created above first.
+DATABASE_URL="postgresql://YOUR_LOCAL_USER@127.0.0.1:5432/nexus_test" python -m pytest -q
+```
+
+```sh
+cd frontend
+npm ci
+npm test -- --run
+npx tsc --noEmit
+npm run build
+```
+
+The production Docker image contains the built frontend, not the frontend development toolchain; run frontend checks from your local checkout.
 
 ---
 
@@ -279,10 +331,16 @@ NEXUS ships with scripted scenarios so its reasoning can be demonstrated and reg
 
 ## Project Structure
 
-```
-nexus/
-├── backend/      # FastAPI service: REST API, auth, correlation / RCA / scoring engine
-├── frontend/     # Next.js app: dashboard, incident workspace, topology, scenarios
+```text
+Nexus/
+├── backend/             # FastAPI API, schema, intelligence engine, and tests
+├── frontend/            # Next.js UI, authentication, notes, inventory routes, and tests
+├── network/topology.json # Shared reference network
+├── docker/              # Process supervision, database bootstrap, and owner tools
+├── docs/                # Docker guide, topology guide, and screenshots
+├── Dockerfile           # Production all-in-one image
+├── compose.yaml         # One service, loopback port, persistent volumes
+├── SECURITY.md          # Security boundaries and dependency findings
 └── README.md
 ```
 
@@ -303,7 +361,7 @@ nexus/
 
 - [ ] Ingest real telemetry (SNMP, syslog, streaming telemetry)
 - [ ] Highlight root cause and impact directly on the topology map
-- [ ] Role-based access control beyond the Operator role
+- [x] Viewer, operator, and administrator access controls
 - [ ] Notifications and webhooks (Slack, email, PagerDuty)
 - [ ] Exportable incident / post-incident reports
 - [ ] CI pipeline with automated test runs
