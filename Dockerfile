@@ -12,7 +12,7 @@ RUN --mount=type=secret,id=build_ca,mode=0444,required=false \
     if [ -f /run/secrets/build_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca SSL_CERT_FILE=/run/secrets/build_ca; fi; \
     npm run build
 
-FROM postgres:17-bookworm AS runtime
+FROM postgres:18-bookworm AS runtime
 RUN --mount=type=secret,id=build_ca,mode=0444,required=false \
     rm -f /etc/apt/sources.list.d/pgdg.list \
     && set --; \
