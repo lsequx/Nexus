@@ -2,10 +2,13 @@
 import os
 import time
 import psycopg
+import sys
+sys.path.insert(0, "/app/backend")
+from security import database_url
 
 for attempt in range(60):
     try:
-        with psycopg.connect(os.environ["DATABASE_URL"], connect_timeout=2) as connection:
+        with psycopg.connect(database_url(), connect_timeout=2) as connection:
             connection.execute("SELECT 1")
         break
     except psycopg.OperationalError:

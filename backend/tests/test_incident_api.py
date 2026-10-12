@@ -10,7 +10,9 @@ from database import (
 )
 
 
-client = TestClient(app)
+from security import get_backend_key
+
+client = TestClient(app, headers={"X-Nexus-Api-Key": get_backend_key()})
 
 
 def test_patch_incident_returns_404_for_missing_incident(

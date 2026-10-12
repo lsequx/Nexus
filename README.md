@@ -190,6 +190,10 @@ The frontend and backend are fully decoupled and communicate only through the RE
 
 ---
 
+## Security
+
+See [SECURITY.md](SECURITY.md) for authenticated API access, private signing keys, owner-only administrator/password commands, deployment boundaries, and dependency-audit findings.
+
 ## Reference Network
 
 The demo now includes 20 devices spanning a WAN gateway, edge router, firewall, L3 core, DMZ, server racks, office access, wireless clients, VPN gateway, and an independent management network. Inventory edits feed both the topology screen and backend correlation. See [the topology design and setup guide](docs/network-topology.md) for addressing, dependency semantics, compatibility, and local setup.
@@ -199,7 +203,7 @@ The demo now includes 20 devices spanning a WAN gateway, edge router, firewall, 
 ### Prerequisites
 
 - [Docker](https://www.docker.com/) and Docker Compose  
-  *or*, to run services individually: Node.js 18+, Python 3.11+, and PostgreSQL
+  *or*, to run services individually: Node.js 22+ (24 tested), Python 3.11+, and PostgreSQL
 
 ### Run everything with Docker (one container)
 
@@ -209,7 +213,7 @@ Install and start Docker Desktop (or Docker Engine with Compose), then run from 
 docker compose up --build -d --wait
 ```
 
-Open **http://localhost:3000**, create your first account, and sign in. One container runs PostgreSQL, FastAPI, and Next.js; named volumes retain database data, accounts, notes, and inventory. No local Python, Node.js, database setup, or `.env` file is needed. See [Docker setup and operation](docs/docker.md) for port changes, backups, existing-database guidance, and troubleshooting.
+Open **http://localhost:3000**, create an operator account, and sign in. For inventory administration, use the owner-only promotion command in the Docker guide. One container runs PostgreSQL, FastAPI, and Next.js; named volumes retain database data, accounts, notes, and inventory. No local Python, Node.js, database setup, or `.env` file is needed. See [Docker setup and operation](docs/docker.md) for port changes, backups, existing-database guidance, and troubleshooting.
 
 ### Local development
 

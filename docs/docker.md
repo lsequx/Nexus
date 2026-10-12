@@ -20,11 +20,27 @@ The image contains PostgreSQL 17, the FastAPI backend, and a production Next.js 
    docker compose up --build -d --wait
    ```
 
-4. Open **http://localhost:3000**. Create an account and sign in. The first account is the local administrator. Open **Topology** to see the reference network, then run a scenario or edit **Admin → Network Inventory**.
+4. Open **http://localhost:3000**. Create an account and sign in. New registrations are operator accounts. To manage inventory, promote your account using the owner-only command below. Open **Topology** to see the reference network, then run a scenario or edit **Admin → Network Inventory**.
 
 The first build downloads dependencies and Google Fonts, so it needs internet access. Allow a few minutes and enough Docker memory for a Next.js build (4 GB is a reasonable starting point). Subsequent starts reuse the image and volumes.
 
-No `.env` file, manually created database, schema setup, or signing key is required. The entrypoint creates `nexus` and `nexus_test`, applies the additive schema, and generates a random session-signing key that persists with application data.
+No `.env` file, manually created database, schema setup, or signing key is required. The entrypoint creates `nexus` and `nexus_test`, applies the additive schema, creates a password-authenticated non-superuser application role, and generates private database/API/session credentials that persists with application data.
+
+## Administrator access and password recovery
+
+Signup never grants administrator access automatically. After registering your account, run this from your own terminal, then sign out and sign in again:
+
+```sh
+docker compose exec --user nexus nexus /opt/venv/bin/python /app/docker/manage-user.py promote-admin your-email@example.com
+```
+
+To create an administrator directly, use `create-admin` instead; it prompts for email, name, and a password without echoing the password. For a forgotten password:
+
+```sh
+docker compose exec --user nexus nexus /opt/venv/bin/python /app/docker/manage-user.py reset-password your-email@example.com
+```
+
+Online password-reset endpoints are disabled until verified email delivery exists. Password and role changes invalidate previous sessions. New passwords must contain 12–128 characters.
 
 ## Existing database and port conflicts
 
@@ -61,10 +77,10 @@ docker compose restart nexus
 docker compose exec nexus supervisorctl -c /app/docker/supervisord.conf status
 
 # Open the internal database shell
-docker compose exec nexus psql -h 127.0.0.1 -U nexus -d nexus
+docker compose exec nexus psql -h /tmp -U nexus -d nexus
 
 # Run backend tests against the isolated test database
-docker compose exec -w /app/backend -e DATABASE_URL=postgresql://nexus@127.0.0.1:5432/nexus_test nexus /opt/venv/bin/python -m pytest -q
+docker compose exec -w /app/backend nexus /opt/venv/bin/python -c 'import os, sys; from security import database_url; os.environ["DATABASE_URL"] = database_url("nexus_test"); import pytest; sys.exit(pytest.main(["-q"]))'
 ```
 
 Database records live in the `nexus-db` named volume. Accounts, notes, inventory, and the signing key live in `nexus-app`. These survive container recreation and `docker compose down`. **`docker compose down -v` deletes both volumes and all stored data**; use it only when deliberately resetting the demo.
@@ -72,16 +88,16 @@ Database records live in the `nexus-db` named volume. Accounts, notes, inventory
 For database backup:
 
 ```sh
-docker compose exec -T nexus pg_dump -h 127.0.0.1 -U nexus -d nexus > nexus-backup.sql
+docker compose exec -T nexus pg_dump -h /tmp -U nexus -d nexus > nexus-backup.sql
 ```
 
 Back up the `nexus-app` volume separately to preserve file-based accounts, notes, inventory, and the signing key. A database dump alone does not contain those files.
 
 ## Local access and deployment
 
-The default published port binds to `127.0.0.1`, so the app is reachable only from your computer. PostgreSQL and FastAPI bind to loopback **inside** the container. All browser API requests use the same frontend origin.
+The default published port binds to `127.0.0.1`, so the app is reachable only from your computer. PostgreSQL and FastAPI bind to loopback **inside** the container. All browser API requests use the same frontend origin and require a signed session for data access. The backend additionally requires a private server-to-server key; this key stays inside the container.
 
-Compose sets `NEXUS_COOKIE_SECURE=false` so login/logout works over local HTTP with the production frontend. For an HTTPS deployment, remove that override or set it to `true`, place the app behind your HTTPS proxy, and deliberately configure external access. Do not expose this local demo configuration unchanged to the public internet: the backend is an internal API and database authentication is trusted only within the container. Database and application processes run as unprivileged users; Supervisor runs as root to launch them.
+Compose sets `NEXUS_COOKIE_SECURE=false` so login/logout works over local HTTP with the production frontend. For an HTTPS deployment, remove that override or set it to `true`, set `NEXUS_APP_ORIGIN` to the exact external HTTPS origin, place the app behind your HTTPS proxy, and deliberately configure external access. Disable `NEXUS_ALLOW_SIGNUP` unless self-registration is deliberately needed. Do not expose this local demo configuration unchanged to the public internet: the backend is an authenticated internal API and the database uses SCRAM password authentication for the limited app role and peer authentication for owner maintenance. See [the security policy](../SECURITY.md) for access boundaries and the known development-only dependency advisory. Database and application processes run as unprivileged users; Supervisor runs as root to launch them.
 
 A single-container image is convenient for this local demo. A production deployment should normally separate the database and application services so they can be secured, backed up, and scaled independently.
 

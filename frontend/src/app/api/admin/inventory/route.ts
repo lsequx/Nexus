@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/session-server";
 import { readInventory, writeInventory } from "@/lib/inventory";
 import { protectedDeviceIds } from "@/data/inventory";
+import { readJsonBody, requireSameOrigin, requestError, RequestError, rateLimit } from "@/lib/request-security";
 import type { InventoryDevice } from "@/types/inventory";
 
 export async function GET() {
@@ -16,7 +17,8 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (user.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   try {
-    const body = await request.json() as Record<string, unknown>;
+    rateLimit(`inventory:${user.id}`, 30, 60_000);
+    const body = await readJsonBody(request);
     const data = readInventory();
     const text = (key: string, fallback = "") => typeof body[key] === "string" ? (body[key] as string).trim() : fallback;
     if (body.kind === "device") {
@@ -36,6 +38,7 @@ export async function POST(request: Request) {
     writeInventory(data);
     return NextResponse.json(data, { status: 201 });
   } catch (error) {
+    if (error instanceof RequestError) return requestError(error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid inventory request." }, { status: 400 });
   }
 }
@@ -44,6 +47,7 @@ export async function DELETE(request: Request) {
   const user = await requireSession();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (user.role !== "admin") return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  try { requireSameOrigin(request); rateLimit(`inventory:${user.id}`, 30, 60_000); } catch (error) { return requestError(error); }
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return NextResponse.json({ error: "A device ID is required." }, { status: 400 });
   if (protectedDeviceIds.has(id)) return NextResponse.json({ error: "Reference topology devices are used by the scenario library and cannot be removed." }, { status: 409 });

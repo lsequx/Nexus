@@ -7,6 +7,8 @@ services:
     environment:
       # The default published port is loopback-only HTTP for local development.
       NEXUS_COOKIE_SECURE: "false"
+      # Self-registration is explicitly enabled only in this loopback demo.
+      NEXUS_ALLOW_SIGNUP: "true"
     volumes:
       - nexus-db:/data/postgres
       - nexus-app:/data/app

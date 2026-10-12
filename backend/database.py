@@ -5,10 +5,11 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 import uuid
 from inventory import read_inventory, sync_devices, inventory_dependencies
+from security import database_url
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = database_url()
 
 connection = psycopg.connect(DATABASE_URL)
 

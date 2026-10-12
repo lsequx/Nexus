@@ -1,10 +1,12 @@
 import os
+import secrets
 
 import pytest
 from dotenv import load_dotenv
 
 
 load_dotenv(".env.test", override=True)
+os.environ["NEXUS_BACKEND_KEY"] = secrets.token_urlsafe(48)
 
 if not os.getenv("DATABASE_URL", "").endswith("/nexus_test"):
     raise RuntimeError(

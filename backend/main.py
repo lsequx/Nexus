@@ -2,7 +2,8 @@ import uuid
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from security import authenticate_backend
+from pydantic import BaseModel, Field
 from typing import Literal
 
 from database import (
@@ -38,6 +39,7 @@ from utils.confidence import (
 
 
 app = FastAPI()
+app.middleware("http")(authenticate_backend)
 
 
 app.add_middleware(
@@ -50,14 +52,14 @@ app.add_middleware(
 
 
 class EventCreate(BaseModel):
-    device_id: str
-    type: str
-    severity: str
+    device_id: str = Field(min_length=1, max_length=128)
+    type: Literal["interface_down", "device_unreachable", "packet_loss", "high_latency"]
+    severity: Literal["Minor", "Major", "Critical"]
 
 
 class IncidentCreate(BaseModel):
-    title: str
-    severity: str
+    title: str = Field(min_length=1, max_length=256)
+    severity: Literal["Minor", "Major", "Critical"]
 
 
 class IncidentStatusUpdate(BaseModel):

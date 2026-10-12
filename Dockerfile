@@ -31,17 +31,22 @@ COPY --from=frontend-build /usr/local/bin/node /usr/local/bin/node
 RUN python3 -m venv /opt/venv
 COPY backend/requirements.txt /tmp/requirements.txt
 RUN /opt/venv/bin/pip install --no-cache-dir --cert /etc/ssl/certs/ca-certificates.crt -r /tmp/requirements.txt
-COPY --from=frontend-build --chown=nexus:nexus /app/frontend/.next/standalone/ /app/
-COPY --from=frontend-build --chown=nexus:nexus /app/frontend/.next/static/ /app/frontend/.next/static/
-COPY --from=frontend-build --chown=nexus:nexus /app/frontend/public/ /app/frontend/public/
-COPY --chown=nexus:nexus backend/ /app/backend/
-COPY --chown=nexus:nexus network/ /app/network/
-COPY --chown=nexus:nexus docker/ /app/docker/
-RUN chmod +x /app/docker/entrypoint.sh
+COPY --from=frontend-build /app/frontend/.next/standalone/ /app/
+COPY --from=frontend-build /app/frontend/.next/static/ /app/frontend/.next/static/
+COPY --from=frontend-build /app/frontend/public/ /app/frontend/public/
+COPY backend/ /app/backend/
+COPY network/ /app/network/
+COPY docker/ /app/docker/
+# Application users can read code, but cannot replace root's boot scripts.
+RUN find /app -type d -exec chmod 755 {} + \
+    && find /app -type f -exec chmod 644 {} + \
+    && chmod 755 /app/docker/entrypoint.sh \
+    && mkdir -p /app/frontend/.next/cache \
+    && chown nexus:nexus /app/frontend/.next/cache
 ENV NODE_ENV=production \
+    PYTHONDONTWRITEBYTECODE=1 \
     NEXT_TELEMETRY_DISABLED=1 \
     PGDATA=/data/postgres \
-    DATABASE_URL=postgresql://nexus@127.0.0.1:5432/nexus \
     NEXUS_DATA_DIR=/data/app \
     NEXUS_INVENTORY_FILE=/data/app/inventory.json \
     HOSTNAME=0.0.0.0 \

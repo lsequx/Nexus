@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { privateDataDir, serverSecret } from "./secrets";
 
 export type UserRole = "admin" | "operator" | "viewer";
 
@@ -12,8 +13,7 @@ export type StoredUser = {
   passwordSalt: string;
   passwordHash: string;
   createdAt: string;
-  resetCodeHash?: string;
-  resetCodeExpiresAt?: string;
+  sessionVersion?: number;
 };
 
 export type PublicUser = {
@@ -23,33 +23,30 @@ export type PublicUser = {
   role: UserRole;
 };
 
-const DATA_DIR = process.env.NEXUS_DATA_DIR || path.join(process.cwd(), ".nexus-data");
+const DATA_DIR = privateDataDir();
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const SESSION_TTL_SECONDS = 60 * 60 * 12;
-const SESSION_SECRET =
-  process.env.NEXUS_SESSION_SECRET ||
-  "nexus-local-development-secret-change-before-production";
 
 function ensureDataDir() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  fs.chmodSync(DATA_DIR, 0o700);
   if (!fs.existsSync(USERS_FILE)) {
-    fs.writeFileSync(USERS_FILE, "[]\n", "utf8");
+    fs.writeFileSync(USERS_FILE, "[]\n", { encoding: "utf8", mode: 0o600, flag: "wx" });
   }
+  fs.chmodSync(USERS_FILE, 0o600);
 }
 
 export function readUsers(): StoredUser[] {
   ensureDataDir();
-  try {
-    return JSON.parse(fs.readFileSync(USERS_FILE, "utf8")) as StoredUser[];
-  } catch {
-    return [];
-  }
+  const users = JSON.parse(fs.readFileSync(USERS_FILE, "utf8")) as StoredUser[];
+  if (!Array.isArray(users)) throw new Error("Invalid user store");
+  return users;
 }
 
 export function writeUsers(users: StoredUser[]) {
   ensureDataDir();
   const temp = `${USERS_FILE}.tmp`;
-  fs.writeFileSync(temp, `${JSON.stringify(users, null, 2)}\n`, "utf8");
+  fs.writeFileSync(temp, `${JSON.stringify(users, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
   fs.renameSync(temp, USERS_FILE);
 }
 
@@ -69,20 +66,24 @@ export function hashPassword(password: string) {
   };
 }
 
-export function verifyPassword(password: string, user: StoredUser) {
-  const attempted = Buffer.from(hashWithSalt(password, user.passwordSalt), "hex");
-  const expected = Buffer.from(user.passwordHash, "hex");
-  return attempted.length === expected.length && crypto.timingSafeEqual(attempted, expected);
+const DUMMY_HASH = hashWithSalt("not-a-real-account", "nexus-dummy-salt");
+
+export function verifyPassword(password: string, user?: StoredUser) {
+  const attempted = Buffer.from(hashWithSalt(password, user?.passwordSalt ?? "nexus-dummy-salt"), "hex");
+  const expected = Buffer.from(user?.passwordHash ?? DUMMY_HASH, "hex");
+  const matches = attempted.length === expected.length && crypto.timingSafeEqual(attempted, expected);
+  return Boolean(user) && matches;
 }
 
 function signPayload(payload: string) {
-  return crypto.createHmac("sha256", SESSION_SECRET).update(payload).digest("base64url");
+  return crypto.createHmac("sha256", serverSecret("NEXUS_SESSION_SECRET", "session-secret")).update(payload).digest("base64url");
 }
 
 export function createSessionToken(user: StoredUser) {
   const payload = Buffer.from(
     JSON.stringify({
       userId: user.id,
+      version: user.sessionVersion ?? 0,
       exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
       nonce: crypto.randomBytes(8).toString("hex"),
     }),
@@ -92,7 +93,8 @@ export function createSessionToken(user: StoredUser) {
 }
 
 export function verifySessionToken(token?: string | null): StoredUser | null {
-  if (!token) return null;
+  if (!token || token.length > 4096) return null;
+  if (token.split(".").length !== 2) return null;
 
   const [payload, signature] = token.split(".");
   if (!payload || !signature) return null;
@@ -106,10 +108,12 @@ export function verifySessionToken(token?: string | null): StoredUser | null {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
       userId: string;
       exp: number;
+      version: number;
     };
 
-    if (data.exp < Math.floor(Date.now() / 1000)) return null;
-    return readUsers().find((user) => user.id === data.userId) ?? null;
+    if (typeof data.userId !== "string" || !Number.isSafeInteger(data.exp) || data.exp <= Math.floor(Date.now() / 1000) || !Number.isSafeInteger(data.version)) return null;
+    const user = readUsers().find((user) => user.id === data.userId);
+    return user && data.version === (user.sessionVersion ?? 0) ? user : null;
   } catch {
     return null;
   }
@@ -124,12 +128,10 @@ export function toPublicUser(user: StoredUser): PublicUser {
   };
 }
 
-export function createResetCode() {
-  return String(crypto.randomInt(100000, 1000000));
-}
-
-export function hashResetCode(code: string) {
-  return crypto.createHash("sha256").update(`${SESSION_SECRET}:${code}`).digest("hex");
+export function revokeSessions(userId: string) {
+  const users = readUsers();
+  const user = users.find((item) => item.id === userId);
+  if (user) { user.sessionVersion = (user.sessionVersion ?? 0) + 1; writeUsers(users); }
 }
 
 export const SESSION_COOKIE_NAME = "nexus_session";
