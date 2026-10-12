@@ -6,7 +6,8 @@ import type { IncidentStatusHistory } from "@/types/incidentHistory";
 
 import type { IncidentAnalysisHistory } from "@/types/incidentAnalysisHistory";
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+// Same-origin requests work in Docker and avoid browser localhost/CORS coupling.
+const API_BASE_URL = "/backend";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, options);

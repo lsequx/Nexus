@@ -6,6 +6,7 @@ import {
   normalizeEmail,
   readUsers,
   SESSION_COOKIE_NAME,
+  SESSION_COOKIE_SECURE,
   SESSION_MAX_AGE,
   toPublicUser,
   writeUsers,
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
   response.cookies.set(SESSION_COOKIE_NAME, createSessionToken(user), {
     httpOnly: true,
     sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
+    secure: SESSION_COOKIE_SECURE,
     path: "/",
     maxAge: SESSION_MAX_AGE,
   });

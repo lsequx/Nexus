@@ -133,4 +133,7 @@ export function hashResetCode(code: string) {
 }
 
 export const SESSION_COOKIE_NAME = "nexus_session";
+export const SESSION_COOKIE_SECURE = process.env.NEXUS_COOKIE_SECURE === "false"
+  ? false
+  : process.env.NODE_ENV === "production";
 export const SESSION_MAX_AGE = SESSION_TTL_SECONDS;

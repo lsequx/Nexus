@@ -1,0 +1,14 @@
+.git
+**/node_modules
+**/.next
+**/.venv
+**/venv
+**/__pycache__
+**/.pytest_cache
+**/.nexus-data
+**/.env
+**/.env.*
+**/*.log
+**/*.tsbuildinfo
+frontend/AGENTS.md
+frontend/CLAUDE.md

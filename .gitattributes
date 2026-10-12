@@ -1,0 +1,2 @@
+# Keep the container entrypoint executable on Windows checkouts too.
+docker/*.sh text eol=lf

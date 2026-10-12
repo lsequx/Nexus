@@ -201,9 +201,19 @@ The demo now includes 20 devices spanning a WAN gateway, edge router, firewall, 
 - [Docker](https://www.docker.com/) and Docker Compose  
   *or*, to run services individually: Node.js 18+, Python 3.11+, and PostgreSQL
 
+### Run everything with Docker (one container)
+
+Install and start Docker Desktop (or Docker Engine with Compose), then run from the repository root:
+
+```sh
+docker compose up --build -d --wait
+```
+
+Open **http://localhost:3000**, create your first account, and sign in. One container runs PostgreSQL, FastAPI, and Next.js; named volumes retain database data, accounts, notes, and inventory. No local Python, Node.js, database setup, or `.env` file is needed. See [Docker setup and operation](docs/docker.md) for port changes, backups, existing-database guidance, and troubleshooting.
+
 ### Local development
 
-This checkout supports the local commands below. Docker Compose files are not included; use the [setup guide](docs/network-topology.md) to prepare PostgreSQL and the shared inventory.
+Alternatively, use the local commands below and the [setup guide](docs/network-topology.md) to prepare PostgreSQL and the shared inventory.
 
 ### Run locally (without Docker)
 

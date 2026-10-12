@@ -1,0 +1,18 @@
+services:
+  nexus:
+    image: nexus:local
+    build: .
+    ports:
+      - "127.0.0.1:${NEXUS_PORT:-3000}:3000"
+    environment:
+      # The default published port is loopback-only HTTP for local development.
+      NEXUS_COOKIE_SECURE: "false"
+    volumes:
+      - nexus-db:/data/postgres
+      - nexus-app:/data/app
+    restart: unless-stopped
+    stop_grace_period: 75s
+
+volumes:
+  nexus-db:
+  nexus-app:
